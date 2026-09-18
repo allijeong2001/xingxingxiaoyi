@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>小纸条</title>
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="float-deco" id="floatDeco"></div>
+
+<div class="page">
+
+  <header class="topbar">
+    <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
+    <span class="topbar-title" id="pageTitle"></span>
+  </header>
+
+  <!-- 状态一：正在写纸条 -->
+  <div class="note-paper" id="writeState">
+    <div class="note-title" id="noteTitle"></div>
+
+    <div class="note-field">
+      <label id="questionLabel"></label>
+      <input type="text" id="questionInput" maxlength="60">
+    </div>
+
+    <div class="note-field">
+      <label id="optionLabel"></label>
+      <input type="text" id="optionA" maxlength="40">
+      <input type="text" id="optionB" maxlength="40" style="margin-top:8px">
+      <input type="text" id="optionC" maxlength="40" style="margin-top:8px">
+    </div>
+
+    <button class="note-btn" id="writeBtn"></button>
+  </div>
+
+  <!-- 状态二：纸条已折叠 -->
+  <div id="foldState" style="display:none;width:100%">
+    <div class="folded-note" id="foldedNote">
+      <span class="seal">💗</span>
+    </div>
+    <div class="note-hint" id="unfoldHint"></div>
+  </div>
+
+  <!-- 状态三：纸条展开（他的选择） -->
+  <div id="openState" style="display:none;width:100%">
+    <div class="open-note note-paper">
+      <div class="note-title" id="openTitle"></div>
+      <div class="note-q" id="openQuestion"></div>
+      <div class="note-opt" data-letter="A">
+        <span class="opt-letter">A</span>
+        <span class="opt-text" id="openOptA"></span>
+        <span class="opt-check"></span>
+      </div>
+      <div class="note-opt" data-letter="B">
+        <span class="opt-letter">B</span>
+        <span class="opt-text" id="openOptB"></span>
+        <span class="opt-check"></span>
+      </div>
+      <div class="note-opt" data-letter="C">
+        <span class="opt-letter">C</span>
+        <span class="opt-text" id="openOptC"></span>
+        <span class="opt-check"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 状态三下方：再写一张 -->
+  <button class="note-btn ghost" id="againBtn" style="display:none;max-width:380px"></button>
+</div>
+
+<script src="config.js"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  var g = SITE_CONFIG.global;
+  var n = SITE_CONFIG.note;
+
+  /* 应用全局配色 */
+  var root = document.documentElement;
+  root.style.setProperty('--grad-from', g.gradientFrom);
+  root.style.setProperty('--grad-to', g.gradientTo);
+  root.style.setProperty('--text-color', g.textColor);
+  root.style.setProperty('--paper-color', n.paperColor);
+  document.title = g.siteTitle + ' · ' + n.pageTitle;
+
+  /* 文案注入 */
+  document.getElementById('pageTitle').textContent = n.title;
+  document.getElementById('noteTitle').textContent = n.title;
+  document.getElementById('openTitle').textContent = n.title;
+  document.getElementById('questionLabel').textContent = n.questionLabel;
+  document.getElementById('questionInput').placeholder = n.questionPlaceholder;
+  document.getElementById('optionLabel').textContent = n.optionLabel;
+  ['optionA', 'optionB', 'optionC'].forEach(function (id) {
+    document.getElementById(id).placeholder = n.optionPlaceholder;
+  });
+  document.getElementById('writeBtn').textContent = n.writeButton;
+  document.getElementById('unfoldHint').textContent = n.unfoldHint;
+  document.getElementById('againBtn').textContent = n.againButton;
+
+  var writeState = document.getElementById('writeState');
+  var foldState = document.getElementById('foldState');
+  var openState = document.getElementById('openState');
+  var againBtn = document.getElementById('againBtn');
+
+  var currentData = null; // { question, options: [a,b,c], pick }
+
+  /* ---------- 第一步：写好纸条，折叠传递 ---------- */
+  document.getElementById('writeBtn').addEventListener('click', function () {
+    var q = document.getElementById('questionInput').value.trim();
+    var a = document.getElementById('optionA').value.trim();
+    var b = document.getElementById('optionB').value.trim();
+    var cOpt = document.getElementById('optionC').value.trim();
+
+    if (!q || !a || !b || !cOpt) {
+      shake(writeState);
+      return;
+    }
+
+    // 纯随机选一个字母
+    var letters = ['A', 'B', 'C'];
+    var pick = letters[Math.floor(Math.random() * 3)];
+
+    currentData = { question: q, options: [a, b, cOpt], pick: pick };
+
+    // 折叠动画：纸条向上翻折收起
+    writeState.style.transition = 'transform .45s ease-in, opacity .45s ease-in';
+    writeState.style.transform = 'perspective(700px) rotateX(65deg)';
+    writeState.style.opacity = '0';
+
+    setTimeout(function () {
+      writeState.style.display = 'none';
+      foldState.style.display = 'block';
+    }, 450);
+  });
+
+  /* ---------- 第二步：点击折叠纸条，展开看结果 ---------- */
+  document.getElementById('foldedNote').addEventListener('click', function () {
+    if (!currentData) return;
+
+    document.getElementById('openQuestion').textContent = currentData.question;
+    document.getElementById('openOptA').textContent = currentData.options[0];
+    document.getElementById('openOptB').textContent = currentData.options[1];
+    document.getElementById('openOptC').textContent = currentData.options[2];
+
+    foldState.style.display = 'none';
+    openState.style.display = 'block';
+
+    // 在随机选中的字母上标红色爱心（不再画勾）
+    var opts = openState.querySelectorAll('.note-opt');
+    opts.forEach(function (el) {
+      el.classList.remove('checked');
+      if (el.getAttribute('data-letter') === currentData.pick) {
+        el.classList.add('checked');
+      }
+    });
+
+    againBtn.style.display = 'block';
+    againBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  /* ---------- 第三步：再写一张 ---------- */
+  againBtn.addEventListener('click', function () {
+    currentData = null;
+    openState.style.display = 'none';
+    againBtn.style.display = 'none';
+    ['questionInput', 'optionA', 'optionB', 'optionC'].forEach(function (id) {
+      document.getElementById(id).value = '';
+    });
+    writeState.style.display = 'block';
+    writeState.style.transition = 'none';
+    writeState.style.transform = 'none';
+    writeState.style.opacity = '1';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  /* 未填完整时的抖动提示 */
+  function shake(el) {
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = 'shakeX .4s ease';
+    setTimeout(function () { el.style.animation = ''; }, 450);
+    var style = document.createElement('style');
+    style.textContent = '@keyframes shakeX{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}50%{transform:translateX(7px)}75%{transform:translateX(-4px)}}';
+    document.head.appendChild(style);
+  }
+
+  /* 漂浮装饰 */
+  var deco = document.getElementById('floatDeco');
+  var symbols = ['⭐', '🍋', '✨', '💌'];
+  for (var i = 0; i < 10; i++) {
+    var s = document.createElement('span');
+    s.textContent = symbols[i % symbols.length];
+    s.style.left = (Math.random() * 100) + '%';
+    s.style.fontSize = (12 + Math.random() * 14) + 'px';
+    s.style.animationDuration = (10 + Math.random() * 14) + 's';
+    s.style.animationDelay = (-Math.random() * 16) + 's';
+    deco.appendChild(s);
+  }
+})();
+</script>
+</body>
+</html>

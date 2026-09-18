@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>聊天</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="chat-app" id="chatApp">
+
+  <!-- 顶部：返回 + 对方昵称 + 字卡库入口 -->
+  <header class="chat-header">
+    <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
+    <span class="chat-title" id="chatTitle"></span>
+    <button class="cards-btn" id="cardsBtn" type="button">🍋 字卡库</button>
+  </header>
+
+  <!-- 聊天记录（仅当前会话有效，刷新即清空） -->
+  <main class="chat-messages" id="messages"></main>
+
+  <!-- 底部输入栏 -->
+  <footer class="chat-input-bar">
+    <input type="text" id="chatInput" autocomplete="off" maxlength="500">
+    <button id="sendBtn"></button>
+  </footer>
+</div>
+
+<!-- ===== 字卡库 ===== -->
+<div class="cards-mask" id="cardsMask">
+  <div class="cards-panel">
+    <div class="cards-head">
+      <span class="cards-title">🍋 字卡库</span>
+      <span class="cards-count" id="cardsCount"></span>
+      <button class="cards-close" id="cardsClose" type="button">✕</button>
+    </div>
+    <div class="cards-tools">
+      <input type="text" id="cardSearch" placeholder="搜索字卡…">
+    </div>
+    <div class="cards-add">
+      <input type="text" id="newCardInput" maxlength="200" placeholder="写一张新字卡…">
+      <button id="addCardBtn" type="button">添加</button>
+    </div>
+    <div class="cards-list" id="cardsList"></div>
+    <div class="cards-foot">
+      <button id="resetCardsBtn" type="button">恢复默认字卡</button>
+      <span class="cards-tip">字卡存在这台设备上，聊天和朋友圈共用 ⭐</span>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  var g = SITE_CONFIG.global;
+  var c = SITE_CONFIG.chat;
+
+  /* 应用全局配色与气泡颜色 */
+  var root = document.documentElement;
+  root.style.setProperty('--grad-from', g.gradientFrom);
+  root.style.setProperty('--grad-to', g.gradientTo);
+  root.style.setProperty('--text-color', g.textColor);
+  root.style.setProperty('--partner-bubble', c.partnerBubbleColor);
+  root.style.setProperty('--partner-bubble-text', c.partnerBubbleTextColor);
+  root.style.setProperty('--user-bubble', c.userBubbleColor);
+  root.style.setProperty('--user-bubble-text', c.userBubbleTextColor);
+  document.title = g.siteTitle + ' · ' + c.pageTitle;
+
+  /* 顶部与输入栏文案 */
+  document.getElementById('chatTitle').textContent = c.partnerName;
+  var input = document.getElementById('chatInput');
+  input.placeholder = c.inputPlaceholder;
+  document.getElementById('sendBtn').textContent = c.sendButtonText;
+
+  var msgBox = document.getElementById('messages');
+  var sendBtn = document.getElementById('sendBtn');
+  var waiting = false; // 是否正在等待对方回复
+
+  document.body.classList.add('has-inputbar'); // 迷你播放器避开输入栏
+
+  /* ---------- 字卡库 ----------
+   * 数据来源：localStorage（聊天与朋友圈共用同一份），没有则用 config 里的默认字卡
+   */
+  var CARDS_KEY = 'xy_chat_cards_v1';
+  var cards;
+  try { cards = JSON.parse(localStorage.getItem(CARDS_KEY)); } catch (e) { cards = null; }
+  if (!Array.isArray(cards)) cards = (c.randomReplies || []).slice();
+  function saveCards() {
+    try { localStorage.setItem(CARDS_KEY, JSON.stringify(cards)); } catch (e) {}
+  }
+
+  var cardsMask = document.getElementById('cardsMask');
+  var cardsList = document.getElementById('cardsList');
+  var cardsCount = document.getElementById('cardsCount');
+  var cardSearch = document.getElementById('cardSearch');
+  var newCardInput = document.getElementById('newCardInput');
+  var editingIdx = -1; // 正在编辑的字卡下标
+
+  function openCards() {
+    cardsMask.classList.add('show');
+    cardSearch.value = '';
+    editingIdx = -1;
+    renderCards();
+  }
+  function closeCards() { cardsMask.classList.remove('show'); }
+
+  document.getElementById('cardsBtn').addEventListener('click', openCards);
+  document.getElementById('cardsClose').addEventListener('click', closeCards);
+  cardsMask.addEventListener('click', function (e) {
+    if (e.target === cardsMask) closeCards();
+  });
+
+  function renderCards() {
+    var kw = cardSearch.value.trim().toLowerCase();
+    cardsCount.textContent = '共 ' + cards.length + ' 张';
+    cardsList.innerHTML = '';
+
+    cards.forEach(function (text, i) {
+      if (kw && String(text).toLowerCase().indexOf(kw) === -1) return;
+
+      var row = document.createElement('div');
+      row.className = 'card-item';
+
+      if (editingIdx === i) {
+        row.classList.add('editing');
+        row.innerHTML =
+          '<input class="card-edit-input" maxlength="200">' +
+          '<button class="card-op save" type="button">保存</button>' +
+          '<button class="card-op cancel" type="button">取消</button>';
+        var inp = row.querySelector('input');
+        inp.value = text;
+        setTimeout(function () { inp.focus(); }, 0);
+        row.querySelector('.save').addEventListener('click', function () {
+          var v = inp.value.trim();
+          if (v) { cards[i] = v; saveCards(); }
+          editingIdx = -1;
+          renderCards();
+        });
+        row.querySelector('.cancel').addEventListener('click', function () {
+          editingIdx = -1;
+          renderCards();
+        });
+      } else {
+        row.innerHTML =
+          '<span class="card-text"></span>' +
+          '<button class="card-op edit" type="button" title="编辑">✎</button>' +
+          '<button class="card-op del" type="button" title="删除">✕</button>';
+        row.querySelector('.card-text').textContent = text;
+        row.querySelector('.edit').addEventListener('click', function () {
+          editingIdx = i;
+          renderCards();
+        });
+        row.querySelector('.del').addEventListener('click', function () {
+          cards.splice(i, 1);
+          saveCards();
+          editingIdx = -1;
+          renderCards();
+        });
+      }
+      cardsList.appendChild(row);
+    });
+
+    if (!cardsList.children.length) {
+      var empty = document.createElement('div');
+      empty.className = 'cards-empty';
+      empty.textContent = kw ? '没有匹配的字卡' : '字卡库空啦，快添加几张吧 🍋';
+      cardsList.appendChild(empty);
+    }
+  }
+
+  cardSearch.addEventListener('input', renderCards);
+
+  function addCard() {
+    var v = newCardInput.value.trim();
+    if (!v) { newCardInput.focus(); return; }
+    cards.push(v);
+    saveCards();
+    newCardInput.value = '';
+    renderCards();
+    cardsList.scrollTop = cardsList.scrollHeight;
+  }
+  document.getElementById('addCardBtn').addEventListener('click', addCard);
+  newCardInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addCard();
+  });
+
+  document.getElementById('resetCardsBtn').addEventListener('click', function () {
+    if (!window.confirm('恢复到默认字卡？你添加和修改过的字卡会丢失哦')) return;
+    cards = (c.randomReplies || []).slice();
+    saveCards();
+    editingIdx = -1;
+    renderCards();
+  });
+
+  /* ---------- 消息渲染 ---------- */
+  function addMessage(who, text) {
+    var msg = document.createElement('div');
+    msg.className = 'msg ' + who;
+
+    var avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    if (who === 'partner') {
+      avatar.style.background = c.partnerAvatarColor;
+      avatar.textContent = c.partnerAvatarText;
+    } else {
+      avatar.style.background = c.userAvatarColor;
+      avatar.textContent = c.userAvatarText;
+    }
+
+    var bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text; // textContent 防注入
+
+    msg.appendChild(avatar);
+    msg.appendChild(bubble);
+    msgBox.appendChild(msg);
+    scrollToBottom();
+    return msg;
+  }
+
+  function addTyping() {
+    var msg = document.createElement('div');
+    msg.className = 'msg partner';
+    msg.id = 'typingMsg';
+    msg.innerHTML =
+      '<div class="avatar" style="background:' + c.partnerAvatarColor + '">' + escapeHtml(c.partnerAvatarText) + '</div>' +
+      '<div class="bubble"><span class="typing-dots"><i></i><i></i><i></i></span></div>';
+    msgBox.appendChild(msg);
+    scrollToBottom();
+  }
+
+  function removeTyping() {
+    var t = document.getElementById('typingMsg');
+    if (t && t.parentNode) t.parentNode.removeChild(t);
+  }
+
+  function scrollToBottom() {
+    requestAnimationFrame(function () {
+      msgBox.scrollTop = msgBox.scrollHeight;
+    });
+  }
+
+  /* ---------- 回复抽取逻辑 ---------- */
+  function pickReply(userText) {
+    var lower = String(userText).toLowerCase();
+    // 关键词规则优先：输入包含任一关键词 -> 从对应回复中随机抽取
+    for (var i = 0; i < (c.keywordRules || []).length; i++) {
+      var rule = c.keywordRules[i];
+      var hit = (rule.keywords || []).some(function (kw) {
+        return kw && lower.indexOf(String(kw).toLowerCase()) !== -1;
+      });
+      if (hit && rule.replies && rule.replies.length) {
+        return rule.replies[Math.floor(Math.random() * rule.replies.length)];
+      }
+    }
+    // 未命中关键词 -> 从字卡库中随机抽取
+    var list = cards;
+    if (!list.length) return '……';
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  /* ---------- 发送 ---------- */
+  function send() {
+    var text = input.value.trim();
+    if (!text || waiting) return;
+    input.value = '';
+    addMessage('user', text);
+    waiting = true;
+    sendBtn.disabled = true;
+    sendBtn.style.opacity = '.6';
+
+    var delay = Number(c.replyDelayMs) || 1000;
+    setTimeout(function () {
+      addTyping();
+    }, Math.max(0, delay - 700));
+
+    setTimeout(function () {
+      removeTyping();
+      addMessage('partner', pickReply(text));
+      waiting = false;
+      sendBtn.disabled = false;
+      sendBtn.style.opacity = '1';
+    }, delay);
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') send();
+  });
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+})();
+</script>
+</body>
+</html>

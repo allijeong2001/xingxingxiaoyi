@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>他的朋友圈</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="float-deco" id="floatDeco"></div>
+
+<div class="page" style="padding-top:14px">
+  <header class="topbar">
+    <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
+    <span class="topbar-title" id="pageTitle"></span>
+  </header>
+
+  <div class="moments-wrap">
+    <!-- 封面：星星与柠檬糖 -->
+    <div class="moments-cover" id="momentsCover"></div>
+
+    <div class="moments-profile">
+      <button class="avatar-btn" id="hisAvatarBtn" type="button" title="换他的头像">
+        <span class="avatar-lg" id="hisAvatar"></span>
+        <span class="avatar-edit">📷</span>
+      </button>
+      <div class="p-name" id="mName"></div>
+      <button class="avatar-btn" id="myAvatarBtn" type="button" title="换我的头像">
+        <span class="avatar-sm" id="myAvatar"></span>
+        <span class="avatar-edit">📷</span>
+      </button>
+    </div>
+
+    <div class="moments-feed" id="feed"></div>
+  </div>
+</div>
+
+<div class="moments-bar" id="momentsBar">
+  <button class="btn-main" id="genBtn" type="button"></button>
+  <button class="btn-ghost" id="postBtn" type="button"></button>
+</div>
+
+<!-- ===== 我也发一条 ===== -->
+<div class="mask" id="postMask">
+  <div class="dialog">
+    <div class="panel-head">
+      <span class="panel-title">我也发一条</span>
+      <button class="icon-btn" id="postClose" type="button">✕</button>
+    </div>
+    <div class="panel-body">
+      <label>想说点什么</label>
+      <textarea id="postText" maxlength="300" placeholder="记录一下此刻…"></textarea>
+      <button class="btn-block" id="postPublish" type="button">发布</button>
+      <p class="tip-muted">发出去的内容存在这台设备的浏览器里，自己的动态随时可以删，他看到就会来评论你 ⭐</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 让他发一条：从字卡库挑选 ===== -->
+<div class="mask" id="pickMask">
+  <div class="dialog">
+    <div class="panel-head">
+      <span class="panel-title">让他发哪张字卡？</span>
+      <button class="icon-btn" id="pickClose" type="button">✕</button>
+    </div>
+    <div class="panel-body">
+      <button class="btn-block" id="pickRandom" type="button">🎲 随机来一条</button>
+      <div class="pick-search">
+        <input type="text" id="pickSearch" placeholder="搜索字卡…">
+      </div>
+      <div class="pick-list" id="pickList"></div>
+      <p class="tip-muted">字卡库和「聊天」页共用同一份，想增删改就去聊天的字卡库 ⭐</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 换头像 ===== -->
+<div class="mask" id="avMask">
+  <div class="dialog">
+    <div class="panel-head">
+      <span class="panel-title" id="avTitle">更换头像</span>
+      <button class="icon-btn" id="avClose" type="button">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="avatar-preview" id="avPreview"></div>
+      <button class="btn-block" id="avPick" type="button">从相册里选一张</button>
+      <div class="row-btns">
+        <button type="button" id="avReset">恢复默认</button>
+        <button type="button" id="avCancel">取消</button>
+      </div>
+      <p class="tip-muted">图片会先缩成小图再存进这台设备的浏览器里，不会上传到任何地方 🍋</p>
+      <input type="file" id="avFile" accept="image/*" hidden>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  var g = SITE_CONFIG.global;
+  var m = SITE_CONFIG.moments || {};
+
+  /* 应用全局配色 */
+  var root = document.documentElement;
+  root.style.setProperty('--grad-from', g.gradientFrom);
+  root.style.setProperty('--grad-to', g.gradientTo);
+  root.style.setProperty('--text-color', g.textColor);
+  document.title = g.siteTitle + ' · ' + (m.pageTitle || '他的朋友圈');
+  document.body.classList.add('has-actionbar');
+
+  var hisName = m.ownerName || '萧逸';
+  var myName = (SITE_CONFIG.chat && SITE_CONFIG.chat.userName) || '星星';
+
+  document.getElementById('pageTitle').textContent = m.pageTitle || '他的朋友圈';
+  document.getElementById('mName').textContent = hisName;
+  document.getElementById('genBtn').textContent = m.generateButton || '让他发一条';
+  document.getElementById('postBtn').textContent = m.postButton || '我也发一条';
+
+  var feed = document.getElementById('feed');
+  var LS_POSTS = 'xy_moments_posts';
+
+  /* ---------- 工具 ---------- */
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+  function timeAgo(ts) {
+    var diff = Math.max(0, Date.now() - ts);
+    var min = Math.floor(diff / 60000);
+    if (min < 1) return '刚刚';
+    if (min < 60) return min + '分钟前';
+    var h = Math.floor(min / 60);
+    if (h < 24) return h + '小时前';
+    var d = Math.floor(h / 24);
+    if (d < 7) return d + '天前';
+    var dt = new Date(ts);
+    return (dt.getMonth() + 1) + '月' + dt.getDate() + '日';
+  }
+
+  function loadPosts() {
+    try { return JSON.parse(localStorage.getItem(LS_POSTS)) || []; }
+    catch (e) { return []; }
+  }
+  function savePosts(list) {
+    try { localStorage.setItem(LS_POSTS, JSON.stringify(list)); } catch (e) {}
+  }
+
+  /* ---------- 萧逸每天自动发 1-2 条（每天首次打开时补发） ---------- */
+  var AUTO_KEY = 'xy_moments_last_auto';
+
+  function autoDailyPosts() {
+    var now = new Date();
+    var key = now.getFullYear() + '-' + (now.getMonth() + 1) + '-' + now.getDate();
+    var last = '';
+    try { last = localStorage.getItem(AUTO_KEY) || ''; } catch (e) {}
+    if (last === key) return; // 今天已经发过了
+
+    var cards = loadCards();
+    if (cards.length) {
+      var count = Math.random() < 0.5 ? 1 : 2;
+      var list = loadPosts();
+      var dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      for (var i = 0; i < count; i++) {
+        // 时间取今天已过去的随机时刻（不会早于今天零点）
+        var span = Math.max(0, Date.now() - dayStart);
+        var t = dayStart + Math.random() * span;
+        list.push({
+          id: uid(), author: 'him',
+          text: cards[Math.floor(Math.random() * cards.length)],
+          time: t, likes: 0, liked: false, likedByHim: false, comments: []
+        });
+      }
+      savePosts(list);
+    }
+    try { localStorage.setItem(AUTO_KEY, key); } catch (e) {}
+  }
+
+  /* ---------- 头像 ---------- */
+  function loadAv(who) {
+    try { return localStorage.getItem('xy_av_' + who) || ''; } catch (e) { return ''; }
+  }
+  function saveAv(who, v) {
+    try { localStorage.setItem('xy_av_' + who, v); } catch (e) {}
+  }
+  function clearAv(who) {
+    try { localStorage.removeItem('xy_av_' + who); } catch (e) {}
+  }
+  function avInner(who) {
+    var src = loadAv(who);
+    if (src) return '<img src="' + src + '" alt="">';
+    return esc((who === 'me' ? myName : hisName).slice(0, 1) || '⭐');
+  }
+  function renderAvatars() {
+    document.getElementById('hisAvatar').innerHTML = avInner('him');
+    document.getElementById('myAvatar').innerHTML = avInner('me');
+  }
+
+  function pickImage(file, size) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var w = img.width, h = img.height;
+          var s = Math.min(w, h) || 1;
+          var canvas = document.createElement('canvas');
+          canvas.width = canvas.height = size;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, (w - s) / 2, (h - s) / 2, s, s, 0, 0, size, size);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = function () { reject(new Error('图片读取失败')); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { reject(new Error('图片读取失败')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* ---------- 渲染 ---------- */
+  var replying = {}; // 他正在输入评论的动态
+
+  function cmtHtml(c) {
+    var isMe = c.who === 'me';
+    var name = isMe ? myName : hisName;
+    var re = c.replyToName ? '<span class="cmt-re">回复 ' + esc(c.replyToName) + '</span>' : '';
+    return '<div class="cmt' + (isMe ? ' me' : '') + '" data-cmt="' + esc(c.id) + '">' +
+      '<span class="cmt-av ' + (isMe ? 'me' : 'him') + '">' + avInner(c.who) + '</span>' +
+      '<div class="cmt-main">' +
+        '<div class="cmt-line"><b>' + esc(name) + '</b>' + re + '：' + esc(c.text) + '</div>' +
+        '<div class="cmt-foot">' +
+          '<span data-ts="' + c.time + '">' + timeAgo(c.time) + '</span>' +
+          (isMe ? '<button class="cmt-op del" type="button" data-op="del">删除</button>' : '') +
+        '</div>' +
+      '</div></div>';
+  }
+  function typingHtml() {
+    return '<div class="cmt typing">' +
+      '<span class="cmt-av him">' + avInner('him') + '</span>' +
+      '<div class="cmt-main"><div class="cmt-line"><b>' + esc(hisName) + '</b>' +
+      '<span class="typing-dots"><i></i><i></i><i></i></span></div></div></div>';
+  }
+
+  function renderFeed() {
+    var list = loadPosts().slice().reverse(); // 最新的在最上面
+    feed.innerHTML = '';
+
+    if (!list.length) {
+      feed.innerHTML = '<div class="moments-empty">这里还什么都没有。<br>点下面的按钮，让他发一条，或者你自己发一条 ⭐</div>';
+      return;
+    }
+
+    list.forEach(function (post) {
+      var mine = post.author === 'me';
+      var el = document.createElement('div');
+      el.className = 'post' + (mine ? ' mine' : '');
+      el.dataset.id = post.id;
+
+      var cmts = post.comments || [];
+      var cmtHtmlStr = cmts.map(cmtHtml).join('') + (replying[post.id] ? typingHtml() : '');
+
+      var acts = mine
+        ? '<button type="button" class="p-ask">让他评论</button>' +
+          '<button type="button" class="p-del">删除</button>'
+        : '<button type="button" class="p-like' + (post.liked ? ' on' : '') + '">' +
+            (post.liked ? '♥ 已赞' : '♡ 赞') + (post.likes ? ' ' + post.likes : '') +
+          '</button>';
+
+      var likedTip = (mine && post.likedByHim)
+        ? '<span class="p-liked">♥ ' + esc(hisName) + '</span>'
+        : '';
+
+      el.innerHTML =
+        '<span class="p-avatar ' + (mine ? 'me' : 'him') + '">' + avInner(post.author) + '</span>' +
+        '<div class="p-main">' +
+          '<div class="p-author">' + esc(mine ? myName : hisName) + '</div>' +
+          '<div class="p-text">' + esc(post.text) + '</div>' +
+          '<div class="p-meta">' +
+            '<span class="p-time" data-ts="' + post.time + '">' + timeAgo(post.time) + '</span>' +
+            likedTip +
+            '<span class="p-acts">' + acts + '</span>' +
+          '</div>' +
+          '<div class="p-comments"' + (cmtHtmlStr ? '' : ' style="display:none"') + '>' + cmtHtmlStr + '</div>' +
+          '<div class="p-comment-row">' +
+            '<input type="text" maxlength="120" placeholder="' + esc(m.commentPlaceholder || '说点什么…') + '">' +
+            '<button type="button">发送</button>' +
+          '</div>' +
+        '</div>';
+
+      bindPost(el, post, mine);
+      feed.appendChild(el);
+    });
+  }
+
+  function bindPost(el, post, mine) {
+    var input = el.querySelector('.p-comment-row input');
+    function submit() {
+      var v = input.value.trim();
+      if (!v) { input.focus(); return; }
+      input.value = '';
+      addComment(post.id, v);
+    }
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    el.querySelector('.p-comment-row button').addEventListener('click', submit);
+
+    /* 删掉自己的评论 */
+    el.querySelectorAll('.cmt-op.del').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var cmtEl = b.closest('.cmt');
+        if (cmtEl && window.confirm('删掉这条评论？')) {
+          removeComment(post.id, cmtEl.getAttribute('data-cmt'));
+        }
+      });
+    });
+
+    if (mine) {
+      el.querySelector('.p-ask').addEventListener('click', function () { himReply(post, false, post.text); });
+      el.querySelector('.p-del').addEventListener('click', function () {
+        if (window.confirm('删掉这条动态？')) {
+          savePosts(loadPosts().filter(function (p) { return p.id !== post.id; }));
+          renderFeed();
+        }
+      });
+    } else {
+      el.querySelector('.p-like').addEventListener('click', function () {
+        var list = loadPosts();
+        list.forEach(function (p) {
+          if (p.id !== post.id) return;
+          if (p.liked) { p.liked = false; p.likes = Math.max(0, (p.likes || 1) - 1); }
+          else { p.liked = true; p.likes = (p.likes || 0) + 1; }
+        });
+        savePosts(list);
+        renderFeed();
+      });
+    }
+  }
+
+  /* ---------- 评论 ---------- */
+  function addComment(postId, text) {
+    var list = loadPosts();
+    var target = null;
+    list.forEach(function (p) {
+      if (p.id !== postId) return;
+      p.comments = p.comments || [];
+      p.comments.push({ id: uid(), who: 'me', text: text, time: Date.now(), replyTo: null, replyToName: '' });
+      target = p;
+    });
+    savePosts(list);
+    renderFeed();
+    if (target) himReply(target, true, text);
+  }
+
+  function removeComment(postId, cmtId) {
+    var list = loadPosts();
+    list.forEach(function (p) {
+      if (p.id !== postId) return;
+      p.comments = (p.comments || []).filter(function (c) { return c.id !== cmtId; });
+    });
+    savePosts(list);
+    renderFeed();
+  }
+
+  /* ---------- 字卡库（与聊天页共用同一份） ---------- */
+  var CARDS_KEY = 'xy_chat_cards_v1';
+  function loadCards() {
+    try {
+      var v = JSON.parse(localStorage.getItem(CARDS_KEY));
+      if (Array.isArray(v)) return v;
+    } catch (e) {}
+    return ((SITE_CONFIG.chat && SITE_CONFIG.chat.randomReplies) || []).slice();
+  }
+
+  /* 回复抽取逻辑：与聊天页完全一致（先关键词规则，再从字卡库随机抽） */
+  function pickReply(userText) {
+    var ch = SITE_CONFIG.chat || {};
+    var lower = String(userText == null ? '' : userText).toLowerCase();
+    for (var i = 0; i < (ch.keywordRules || []).length; i++) {
+      var rule = ch.keywordRules[i];
+      var hit = (rule.keywords || []).some(function (kw) {
+        return kw && lower.indexOf(String(kw).toLowerCase()) !== -1;
+      });
+      if (hit && rule.replies && rule.replies.length) {
+        return rule.replies[Math.floor(Math.random() * rule.replies.length)];
+      }
+    }
+    var list = loadCards();
+    return list.length ? list[Math.floor(Math.random() * list.length)] : '……';
+  }
+
+  /* 他回复：先出现"正在输入"，再接一句 */
+  function himReply(post, replyingToMe, srcText) {
+    if (replying[post.id]) return;
+    replying[post.id] = true;
+    renderFeed();
+
+    setTimeout(function () {
+      var list = loadPosts();
+      list.forEach(function (p) {
+        if (p.id !== post.id) return;
+        p.comments = p.comments || [];
+        p.comments.push({
+          id: uid(), who: 'him', text: pickReply(srcText), time: Date.now(),
+          replyTo: null, replyToName: replyingToMe ? myName : ''
+        });
+        /* 评论我的动态时顺手点个赞 */
+        if (post.author === 'me' && !p.likedByHim) {
+          p.likedByHim = true;
+          p.likes = (p.likes || 0) + 1;
+        }
+      });
+      savePosts(list);
+      replying[post.id] = false;
+      renderFeed();
+    }, 1400 + Math.random() * 1400);
+  }
+
+  /* ---------- 让他发一条动态：从字卡库里挑 ---------- */
+  var pickMask = document.getElementById('pickMask');
+  var pickSearch = document.getElementById('pickSearch');
+  var pickList = document.getElementById('pickList');
+
+  function publishHim(text) {
+    if (!text) return;
+    closePicker();
+    var list = loadPosts();
+    list.push({
+      id: uid(), author: 'him', text: text,
+      time: Date.now(), likes: 0, liked: false, likedByHim: false, comments: []
+    });
+    savePosts(list);
+    renderFeed();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function renderPickList() {
+    var kw = pickSearch.value.trim().toLowerCase();
+    var cards = loadCards();
+    pickList.innerHTML = '';
+    var shown = 0;
+    cards.forEach(function (text) {
+      if (kw && String(text).toLowerCase().indexOf(kw) === -1) return;
+      shown++;
+      var item = document.createElement('div');
+      item.className = 'card-item';
+      var t = document.createElement('span');
+      t.className = 'card-text';
+      t.textContent = text;
+      item.appendChild(t);
+      item.addEventListener('click', function () { publishHim(text); });
+      pickList.appendChild(item);
+    });
+    if (!shown) {
+      var empty = document.createElement('div');
+      empty.className = 'pick-empty';
+      empty.textContent = kw ? '没有匹配的字卡' : '字卡库是空的，先去「聊天」的字卡库添加几张吧 🍋';
+      pickList.appendChild(empty);
+    }
+  }
+
+  function openPicker() {
+    pickSearch.value = '';
+    renderPickList();
+    pickMask.classList.add('show');
+  }
+  function closePicker() { pickMask.classList.remove('show'); }
+
+  document.getElementById('genBtn').addEventListener('click', openPicker);
+  document.getElementById('pickClose').addEventListener('click', closePicker);
+  pickMask.addEventListener('click', function (e) { if (e.target === pickMask) closePicker(); });
+  pickSearch.addEventListener('input', renderPickList);
+
+  document.getElementById('pickRandom').addEventListener('click', function () {
+    var cards = loadCards();
+    if (!cards.length) return;
+    publishHim(cards[Math.floor(Math.random() * cards.length)]);
+  });
+
+  /* ---------- 我也发一条 ---------- */
+  var postMask = document.getElementById('postMask');
+  var postText = document.getElementById('postText');
+
+  function openPost() {
+    postText.value = '';
+    postMask.classList.add('show');
+    setTimeout(function () { postText.focus(); }, 60);
+  }
+  function closePost() { postMask.classList.remove('show'); }
+
+  document.getElementById('postBtn').addEventListener('click', openPost);
+  document.getElementById('postClose').addEventListener('click', closePost);
+  postMask.addEventListener('click', function (e) { if (e.target === postMask) closePost(); });
+
+  function publish() {
+    var text = postText.value.trim();
+    if (!text) { postText.focus(); return; }
+    var list = loadPosts();
+    var p = { id: uid(), author: 'me', text: text, time: Date.now(), likes: 0, liked: false, likedByHim: false, comments: [] };
+    list.push(p);
+    savePosts(list);
+    closePost();
+    renderFeed();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    /* 他看到就会来评论一句 */
+    setTimeout(function () { himReply(p, false, text); }, 1200);
+  }
+  document.getElementById('postPublish').addEventListener('click', publish);
+  postText.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) publish();
+  });
+
+  /* ---------- 换头像 ---------- */
+  var avWho = null;
+  var avMask = document.getElementById('avMask');
+  var avPreview = document.getElementById('avPreview');
+  var avFile = document.getElementById('avFile');
+  var avPick = document.getElementById('avPick');
+
+  function openAvatar(who) {
+    avWho = who;
+    document.getElementById('avTitle').textContent = who === 'me' ? '我的头像' : '他的头像';
+    avPreview.innerHTML = '<span class="avatar-lg' + (who === 'me' ? ' av-me' : '') + '">' + avInner(who) + '</span>';
+    avMask.classList.add('show');
+  }
+  function closeAvatar() { avMask.classList.remove('show'); }
+
+  document.getElementById('hisAvatarBtn').addEventListener('click', function () { openAvatar('him'); });
+  document.getElementById('myAvatarBtn').addEventListener('click', function () { openAvatar('me'); });
+  document.getElementById('avClose').addEventListener('click', closeAvatar);
+  document.getElementById('avCancel').addEventListener('click', closeAvatar);
+  avMask.addEventListener('click', function (e) { if (e.target === avMask) closeAvatar(); });
+  avPick.addEventListener('click', function () { avFile.click(); });
+
+  avFile.addEventListener('change', function () {
+    var f = avFile.files && avFile.files[0];
+    avFile.value = '';
+    if (!f) return;
+    avPick.disabled = true;
+    avPick.textContent = '处理中…';
+    pickImage(f, 240)
+      .then(function (dataUrl) {
+        saveAv(avWho, dataUrl);
+        renderAvatars();
+        renderFeed();
+        closeAvatar();
+      })
+      .catch(function () { window.alert('图片处理失败，换一张试试'); })
+      .then(function () {
+        avPick.disabled = false;
+        avPick.textContent = '从相册里选一张';
+      });
+  });
+
+  document.getElementById('avReset').addEventListener('click', function () {
+    clearAv(avWho);
+    renderAvatars();
+    renderFeed();
+    closeAvatar();
+  });
+
+  /* ---------- 封面装饰 ---------- */
+  var cover = document.getElementById('momentsCover');
+  var coverSymbols = ['⭐', '🍋', '🌟', '🍬', '✨'];
+  for (var ci = 0; ci < 12; ci++) {
+    var cs = document.createElement('span');
+    cs.textContent = coverSymbols[ci % coverSymbols.length];
+    cs.className = (ci % 3 === 1) ? 'cover-candy' : 'cover-star';
+    cs.style.left = (4 + Math.random() * 90) + '%';
+    cs.style.top = (6 + Math.random() * 80) + '%';
+    cs.style.animationDelay = (-Math.random() * 3) + 's';
+    cover.appendChild(cs);
+  }
+
+  /* ---------- 漂浮装饰 ---------- */
+  var deco = document.getElementById('floatDeco');
+  var symbols = ['⭐', '🍋', '✨', '🌟', '🍬', '💫'];
+  for (var i = 0; i < 12; i++) {
+    var s = document.createElement('span');
+    s.textContent = symbols[i % symbols.length];
+    s.style.left = (Math.random() * 100) + '%';
+    s.style.fontSize = (12 + Math.random() * 16) + 'px';
+    s.style.animationDuration = (9 + Math.random() * 14) + 's';
+    s.style.animationDelay = (-Math.random() * 16) + 's';
+    deco.appendChild(s);
+  }
+
+  /* ---------- 时间显示自动刷新 ---------- */
+  setInterval(function () {
+    feed.querySelectorAll('[data-ts]').forEach(function (el) {
+      var ts = Number(el.getAttribute('data-ts'));
+      if (ts) el.textContent = timeAgo(ts);
+    });
+  }, 30000);
+
+  /* ---------- 初始化 ---------- */
+  renderAvatars();
+  autoDailyPosts();
+  renderFeed();
+})();
+</script>
+</body>
+</html>

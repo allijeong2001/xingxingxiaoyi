@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>一起听</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="float-deco" id="floatDeco"></div>
+
+<div class="page" style="padding-top:14px">
+  <header class="topbar">
+    <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
+    <span class="topbar-title" id="pageTitle"></span>
+  </header>
+
+  <div class="music-room">
+
+    <!-- 两个人 + 连接 -->
+    <div class="duo">
+      <button class="duo-av him" id="hisAvBtn" type="button" title="换萧逸的头像">
+        <span class="duo-pulse"></span>
+        <span class="duo-img" id="hisAvImg"></span>
+        <span class="duo-edit">📷</span>
+      </button>
+      <div class="duo-link">
+        <span class="duo-star">⭐</span>
+        <i></i>
+      </div>
+      <button class="duo-av me" id="myAvBtn" type="button" title="换我的头像">
+        <span class="duo-pulse"></span>
+        <span class="duo-img" id="myAvImg"></span>
+        <span class="duo-edit">📷</span>
+      </button>
+    </div>
+
+    <div class="listen-badge" id="listenBadge"></div>
+
+    <!-- 唱片 -->
+    <div class="disc-wrap">
+      <div class="disc" id="disc"><span class="disc-candy">🍋</span></div>
+    </div>
+
+    <!-- 曲目信息 -->
+    <div class="track-name" id="trackName"></div>
+    <div class="track-sub" id="trackSub"></div>
+
+    <!-- 进度条 -->
+    <div class="music-progress">
+      <span id="curTime">0:00</span>
+      <div class="prog-bar" id="progBar"><div class="prog-fill" id="progFill"></div></div>
+      <span id="durTime">0:00</span>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="music-controls">
+      <button class="mc-btn" id="back15Btn" type="button" title="后退15秒">↺15</button>
+      <button class="mc-play" id="playBtn" type="button">▶</button>
+      <button class="mc-btn" id="fwd15Btn" type="button" title="前进15秒">15↻</button>
+    </div>
+
+    <!-- 音量 -->
+    <div class="music-volume">🔈
+      <input type="range" id="volRange" min="0" max="100" value="90">
+    </div>
+
+    <button class="music-import" id="importBtn" type="button"></button>
+    <input type="file" id="audioFile" accept="audio/*" hidden>
+
+    <!-- 他说话 -->
+    <div class="him-talk" id="himTalk"></div>
+  </div>
+</div>
+
+<!-- ===== 换头像 ===== -->
+<div class="mask" id="avMask">
+  <div class="dialog">
+    <div class="panel-head">
+      <span class="panel-title" id="avTitle">更换头像</span>
+      <button class="icon-btn" id="avClose" type="button">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="avatar-preview" id="avPreview"></div>
+      <button class="btn-block" id="avPick" type="button">从相册里选一张</button>
+      <div class="row-btns">
+        <button type="button" id="avReset">恢复默认</button>
+        <button type="button" id="avCancel">取消</button>
+      </div>
+      <p class="tip-muted">图片会先缩成小图再存进这台设备的浏览器里，不会上传到任何地方 ⭐</p>
+      <input type="file" id="avFile" accept="image/*" hidden>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  var g = SITE_CONFIG.global;
+  var m = SITE_CONFIG.music || {};
+
+  /* 应用全局配色 */
+  var root = document.documentElement;
+  root.style.setProperty('--grad-from', g.gradientFrom);
+  root.style.setProperty('--grad-to', g.gradientTo);
+  root.style.setProperty('--text-color', g.textColor);
+  document.title = g.siteTitle + ' · ' + (m.pageTitle || '一起听');
+
+  document.getElementById('pageTitle').textContent = m.pageTitle || '一起听';
+  document.getElementById('listenBadge').textContent = m.statusText || '正在和萧逸一起听 ♪';
+
+  var P = window.XYPlayer;
+  var audio = P.audio;
+
+  var hisName = (SITE_CONFIG.chat && SITE_CONFIG.chat.partnerName) || '萧逸';
+  var myName = (SITE_CONFIG.chat && SITE_CONFIG.chat.userName) || '星星';
+
+  /* ---------- 头像 ---------- */
+  function loadAv(who) {
+    try { return localStorage.getItem('xy_av_' + who) || ''; } catch (e) { return ''; }
+  }
+  function saveAv(who, v) {
+    try { localStorage.setItem('xy_av_' + who, v); } catch (e) {}
+  }
+  function clearAv(who) {
+    try { localStorage.removeItem('xy_av_' + who); } catch (e) {}
+  }
+  function avInner(who) {
+    var src = loadAv(who);
+    if (src) return '<img src="' + src + '" alt="">';
+    var name = who === 'me' ? myName : hisName;
+    return esc(name.slice(0, 1) || '⭐');
+  }
+  function renderAvatars() {
+    document.getElementById('hisAvImg').innerHTML = avInner('him');
+    document.getElementById('myAvImg').innerHTML = avInner('me');
+    if (avWho) {
+      document.getElementById('avPreview').innerHTML =
+        '<span class="avatar-lg' + (avWho === 'me' ? ' av-me' : '') + '">' + avInner(avWho) + '</span>';
+    }
+  }
+
+  function pickImage(file, size) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var w = img.width, h = img.height;
+          var s = Math.min(w, h) || 1;
+          var canvas = document.createElement('canvas');
+          canvas.width = canvas.height = size;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, (w - s) / 2, (h - s) / 2, s, s, 0, 0, size, size);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = function () { reject(new Error('图片读取失败')); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { reject(new Error('图片读取失败')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  var avWho = null;
+  var avMask = document.getElementById('avMask');
+  var avFile = document.getElementById('avFile');
+  var avPick = document.getElementById('avPick');
+
+  function openAvatar(who) {
+    avWho = who;
+    document.getElementById('avTitle').textContent = who === 'me' ? '我的头像' : '萧逸的头像';
+    document.getElementById('avPreview').innerHTML =
+      '<span class="avatar-lg' + (who === 'me' ? ' av-me' : '') + '">' + avInner(who) + '</span>';
+    avMask.classList.add('show');
+  }
+  function closeAvatar() { avMask.classList.remove('show'); }
+
+  document.getElementById('hisAvBtn').addEventListener('click', function () { openAvatar('him'); });
+  document.getElementById('myAvBtn').addEventListener('click', function () { openAvatar('me'); });
+  document.getElementById('avClose').addEventListener('click', closeAvatar);
+  document.getElementById('avCancel').addEventListener('click', closeAvatar);
+  avMask.addEventListener('click', function (e) { if (e.target === avMask) closeAvatar(); });
+  avPick.addEventListener('click', function () { avFile.click(); });
+
+  avFile.addEventListener('change', function () {
+    var f = avFile.files && avFile.files[0];
+    avFile.value = '';
+    if (!f) return;
+    avPick.disabled = true;
+    avPick.textContent = '处理中…';
+    pickImage(f, 240)
+      .then(function (dataUrl) {
+        saveAv(avWho, dataUrl);
+        renderAvatars();
+        closeAvatar();
+      })
+      .catch(function () { window.alert('图片处理失败，换一张试试'); })
+      .then(function () {
+        avPick.disabled = false;
+        avPick.textContent = '从相册里选一张';
+      });
+  });
+
+  document.getElementById('avReset').addEventListener('click', function () {
+    clearAv(avWho);
+    renderAvatars();
+    closeAvatar();
+  });
+
+  /* ---------- 播放器 UI ---------- */
+  var playBtn = document.getElementById('playBtn');
+  var disc = document.getElementById('disc');
+  var nameEl = document.getElementById('trackName');
+  var subEl = document.getElementById('trackSub');
+  var curTimeEl = document.getElementById('curTime');
+  var durTimeEl = document.getElementById('durTime');
+  var progFill = document.getElementById('progFill');
+  var progBar = document.getElementById('progBar');
+  var volRange = document.getElementById('volRange');
+  var importBtn = document.getElementById('importBtn');
+  var audioFile = document.getElementById('audioFile');
+  var himTalk = document.getElementById('himTalk');
+
+  function fmt(t) {
+    t = Math.max(0, Math.floor(t || 0));
+    var mnt = Math.floor(t / 60), s = t % 60;
+    return mnt + ':' + (s < 10 ? '0' + s : s);
+  }
+
+  function update() {
+    var has = P.hasTrack();
+    nameEl.textContent = has ? P.getName() : (m.emptyName || '还没有导入音频');
+    subEl.textContent = has
+      ? (m.statusText || '正在和萧逸一起听 ♪')
+      : (m.emptyTip || '点下面的按钮，选一首你们都喜欢的歌吧');
+    importBtn.textContent = has ? (m.changeButton || '🍋 换一首') : (m.importButton || '🍋 导入音频');
+    var playing = has && !audio.paused;
+    playBtn.textContent = playing ? '⏸' : '▶';
+    disc.classList.toggle('playing', playing);
+    curTimeEl.textContent = fmt(audio.currentTime);
+    durTimeEl.textContent = fmt(audio.duration);
+    var dur = audio.duration || 0;
+    progFill.style.width = (dur ? (audio.currentTime / dur) * 100 : 0) + '%';
+  }
+  P.onChange(update);
+  setInterval(update, 500);
+
+  playBtn.addEventListener('click', function () {
+    if (!P.hasTrack()) { audioFile.click(); return; }
+    P.toggle();
+  });
+
+  document.getElementById('back15Btn').addEventListener('click', function () {
+    P.seek((audio.currentTime || 0) - 15);
+  });
+  document.getElementById('fwd15Btn').addEventListener('click', function () {
+    P.seek((audio.currentTime || 0) + 15);
+  });
+
+  progBar.addEventListener('click', function (e) {
+    var dur = audio.duration || 0;
+    if (!dur) return;
+    var rect = progBar.getBoundingClientRect();
+    var ratio = (e.clientX - rect.left) / rect.width;
+    P.seek(ratio * dur);
+  });
+
+  volRange.value = Math.round((audio.volume != null ? audio.volume : 0.9) * 100);
+  volRange.addEventListener('input', function () {
+    P.setVolume(volRange.value / 100);
+  });
+
+  importBtn.addEventListener('click', function () { audioFile.click(); });
+
+  audioFile.addEventListener('change', function () {
+    var f = audioFile.files && audioFile.files[0];
+    audioFile.value = '';
+    if (!f) return;
+    importBtn.disabled = true;
+    importBtn.textContent = '导入中…';
+    P.setTrack(f.name, f);
+    importBtn.disabled = false;
+    update();
+    setTimeout(showTalk, 1800);
+  });
+
+  /* ---------- 他说话 ---------- */
+  var talkList = m.talkList || [];
+  var talkTimer = null;
+
+  function showTalk() {
+    if (!talkList.length || audio.paused || !P.hasTrack()) return;
+    himTalk.textContent = talkList[Math.floor(Math.random() * talkList.length)];
+    himTalk.classList.add('show');
+  }
+
+  audio.addEventListener('play', function () {
+    showTalk();
+    clearInterval(talkTimer);
+    talkTimer = setInterval(showTalk, 30000);
+  });
+  audio.addEventListener('pause', function () { clearInterval(talkTimer); });
+
+  /* ---------- 初始 ---------- */
+  renderAvatars();
+  himTalk.textContent = P.hasTrack() ? '接着上次的进度，我们继续听 ♪' : '星星，选首歌，我们一起听';
+  himTalk.classList.add('show');
+  update();
+
+  /* ---------- 漂浮装饰 ---------- */
+  var deco = document.getElementById('floatDeco');
+  var symbols = ['⭐', '🍋', '✨', '🌟', '🍬', '💫'];
+  for (var i = 0; i < 12; i++) {
+    var s = document.createElement('span');
+    s.textContent = symbols[i % symbols.length];
+    s.style.left = (Math.random() * 100) + '%';
+    s.style.fontSize = (12 + Math.random() * 16) + 'px';
+    s.style.animationDuration = (9 + Math.random() * 14) + 's';
+    s.style.animationDelay = (-Math.random() * 16) + 's';
+    deco.appendChild(s);
+  }
+
+  function esc(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+})();
+</script>
+</body>
+</html>

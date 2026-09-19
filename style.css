@@ -934,6 +934,31 @@ body.has-actionbar .mini-player { bottom: calc(72px + env(safe-area-inset-bottom
   height: 3px; border-radius: 3px; background: rgba(139, 128, 216, .15); overflow: hidden;
 }
 .mini-player .mp-prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8fb8ff, #ff9fc4); }
+.mini-player .mp-fold {
+  flex: none; width: 26px; height: 26px; border: none; border-radius: 50%;
+  background: #eef2ff; color: #7a72a8; font-size: 14px; line-height: 1;
+  cursor: pointer;
+}
+.mini-player .mp-fold:active { transform: scale(.9); }
+
+/* 收起后的角落小圆按钮 */
+.mini-player-fab {
+  position: fixed;
+  right: 16px; bottom: calc(18px + env(safe-area-inset-bottom));
+  width: 46px; height: 46px; border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, .95);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 20px rgba(122, 122, 205, .4);
+  font-size: 20px; cursor: pointer; z-index: 80;
+  animation: miniIn .3s ease both;
+}
+.mini-player-fab.playing { animation: fabBeat 2.4s ease-in-out infinite; }
+@keyframes fabBeat {
+  0%, 100% { transform: scale(1); }
+  12% { transform: scale(1.1); }
+  24% { transform: scale(1); }
+}
+.mini-player-fab:active { transform: scale(.9); }
 
 /* =====================================================
  * 朋友圈

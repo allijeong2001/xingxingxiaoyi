@@ -1,8 +1,9 @@
 /* =====================================================
  * 全局音频播放器（一起听）
  * - 音频文件存在 IndexedDB，播放进度/音量存在 localStorage
- * - 切换页面时自动从上次的位置继续播放（纯后台，无浮窗）
- * - 播放界面只在 music.html 里
+ * - 切换页面时自动从上次的位置继续播放
+ * - music.html 以外的页面显示可收起的迷你播放条
+ *   （收起后变成角落小圆按钮，点一下展开）
  * ===================================================== */
 window.XYPlayer = (function () {
   var LS_KEY = 'xy_player_state';
@@ -132,14 +133,83 @@ window.XYPlayer = (function () {
   function hasTrack() { return !!trackName; }
   function getName() { return trackName; }
 
-  /* ---------- 播放条只在 music.html 内展示 ----------
-   * 其他页面不显示任何浮窗，仅在后台静默续播
-   * （每次切页会从 IndexedDB 恢复音频并接着上次进度播放）
-   */
-  function buildMini() { /* 不再在其他页面创建迷你播放条 */ }
-  function renderMini() { /* 无浮窗可渲染 */ }
+  /* ---------- 迷你播放条（music 页除外，可收起） ---------- */
+  var MINI_COLLAPSED_KEY = 'xy_player_mini_collapsed';
+  var collapsed = '1' === (function () {
+    try { return localStorage.getItem(MINI_COLLAPSED_KEY) || ''; } catch (e) { return ''; }
+  })();
 
-  function init() {}
+  function buildMini() {
+    if (isMusicPage || miniEl) return;
+    var el = document.createElement('div');
+    el.className = 'mini-player';
+    el.style.display = 'none';
+    el.innerHTML =
+      '<span class="mp-cover">🍋</span>' +
+      '<div class="mp-info">' +
+        '<div class="mp-name"></div>' +
+        '<div class="mp-state">和萧逸一起听中 ♪</div>' +
+      '</div>' +
+      '<button class="mp-btn" type="button" title="播放/暂停">▶</button>' +
+      '<button class="mp-fold" type="button" title="收起来">⌄</button>' +
+      '<div class="mp-prog"><i></i></div>';
+
+    /* 收起后的小圆按钮 */
+    var fab = document.createElement('button');
+    fab.type = 'button';
+    fab.className = 'mini-player-fab' + (audio.paused ? '' : ' playing');
+    fab.title = '展开播放条';
+    fab.style.display = 'none';
+    fab.innerHTML = '🎵';
+
+    document.body.appendChild(el);
+    document.body.appendChild(fab);
+    miniEl = el;
+    miniFab = fab;
+
+    el.querySelector('.mp-btn').addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggle();
+    });
+    el.querySelector('.mp-info').addEventListener('click', function () {
+      location.href = 'music.html';
+    });
+    el.querySelector('.mp-fold').addEventListener('click', function (e) {
+      e.stopPropagation();
+      collapsed = true;
+      try { localStorage.setItem(MINI_COLLAPSED_KEY, '1'); } catch (err) {}
+      renderMini();
+    });
+    fab.addEventListener('click', function () {
+      collapsed = false;
+      try { localStorage.setItem(MINI_COLLAPSED_KEY, '0'); } catch (err) {}
+      renderMini();
+    });
+  }
+
+  var miniFab = null;
+
+  function renderMini() {
+    if (!miniEl || !miniFab) return;
+    var has = !!trackName;
+    miniEl.style.display = (has && !collapsed) ? 'flex' : 'none';
+    miniFab.style.display = (has && collapsed) ? 'block' : 'none';
+    if (!has) return;
+    miniEl.querySelector('.mp-name').textContent = trackName;
+    miniEl.querySelector('.mp-btn').textContent = audio.paused ? '▶' : '⏸';
+    miniEl.classList.toggle('playing', !audio.paused);
+    miniFab.classList.toggle('playing', !audio.paused);
+    miniFab.textContent = audio.paused ? '🎵' : '🎶';
+    var dur = audio.duration || 0;
+    var pct = dur ? (audio.currentTime / dur) * 100 : 0;
+    miniEl.querySelector('.mp-prog i').style.width = pct + '%';
+  }
+  listeners.push(renderMini);
+
+  function init() {
+    buildMini();
+    renderMini();
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

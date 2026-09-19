@@ -17,6 +17,8 @@ window.XYPlayer = (function () {
   var listeners = [];
   var miniEl = null;
   var pendingSeek = typeof state.time === 'number' ? state.time : 0;
+  var wantPlay = !!state.wantPlay; // 用户是否希望正在播放（跨页面恢复用）
+  var gestureArmed = false; // 是否已挂上"首次交互后恢复播放"的监听
 
   /* ---------- 状态存取 ---------- */
   function loadState() {
@@ -28,6 +30,7 @@ window.XYPlayer = (function () {
       localStorage.setItem(LS_KEY, JSON.stringify({
         name: trackName,
         playing: !audio.paused && !audio.ended,
+        wantPlay: wantPlay,
         time: audio.currentTime || 0,
         volume: audio.volume
       }));
@@ -87,11 +90,34 @@ window.XYPlayer = (function () {
     notify();
   }
   function play() {
+    wantPlay = true;
     var p = audio.play();
-    if (p && p.catch) p.catch(function () { saveState(); notify(); });
+    if (p && p.catch) p.catch(function () {
+      /* 浏览器自动播放策略拦截：等用户在本页的第一次交互（点击/触摸/按键）立即恢复 */
+      saveState();
+      armResumeOnGesture();
+      notify();
+    });
   }
-  function pause() { audio.pause(); }
+  function pause() { wantPlay = false; audio.pause(); }
   function toggle() { if (!audio.src) return; audio.paused ? play() : pause(); }
+
+  /* 首次交互后恢复播放（绕过自动播放限制的标准做法） */
+  function armResumeOnGesture() {
+    if (gestureArmed) return;
+    gestureArmed = true;
+    var opts = { capture: true };
+    function resume() {
+      gestureArmed = false;
+      removeEventListener('click', resume, opts);
+      removeEventListener('touchend', resume, opts);
+      removeEventListener('keydown', resume, opts);
+      if (wantPlay) play();
+    }
+    addEventListener('click', resume, opts);
+    addEventListener('touchend', resume, opts);
+    addEventListener('keydown', resume, opts);
+  }
   function seek(t) {
     if (!audio.src) return;
     audio.currentTime = Math.max(0, Math.min(t, audio.duration || 0));
@@ -123,13 +149,13 @@ window.XYPlayer = (function () {
   /* ---------- 初始化：恢复上次的曲目 ---------- */
   if (trackName) {
     idbGet('current_audio').then(function (blob) {
-      if (!blob) { trackName = ''; saveState(); renderMini(); return; }
+      if (!blob) { trackName = ''; wantPlay = false; saveState(); renderMini(); return; }
       objUrl = URL.createObjectURL(blob);
       audio.src = objUrl;
       if (pendingSeek > 0) {
         try { audio.currentTime = pendingSeek; } catch (e) {}
       }
-      if (state.playing) play();
+      if (state.wantPlay || state.playing) play();
       notify();
     }).catch(function () {});
   }

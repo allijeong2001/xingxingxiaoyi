@@ -19,10 +19,8 @@ window.XYPlayer = (function () {
   var miniFab = null;
   var pendingSeek = typeof state.time === 'number' ? state.time : 0;
 
-  /* 折叠状态（收起后变角落小圆点，点一下展开） */
-  var FOLD_KEY = 'xy_player_folded';
+  /* 折叠状态（收起后变角落小圆点，点一下展开；每次进页面默认展开，避免找不到） */
   var folded = false;
-  try { folded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) {}
 
   /* ---------- 状态存取 ---------- */
   function loadState() {
@@ -92,11 +90,30 @@ window.XYPlayer = (function () {
     play();
     notify();
   }
+  /* iPhone 等设备：切页面后自动续播会被浏览器拦截，
+   * 记下来，等用户第一次碰屏幕（点任何地方）立即恢复播放 */
+  var blockedByPolicy = false;
+  var touchUsed = false;
   function play() {
     var p = audio.play();
-    if (p && p.catch) p.catch(function () { saveState(); notify(); });
+    if (p && p.catch) p.catch(function () {
+      blockedByPolicy = true;
+      saveState(); notify();
+    });
   }
-  function pause() { audio.pause(); }
+  function pause() { blockedByPolicy = false; audio.pause(); }
+  audio.addEventListener('play', function () { blockedByPolicy = false; });
+  function onFirstTouch(e) {
+    if (touchUsed) return;
+    /* 点的是播放条/小圆点本身：跳过自动续播，交给按钮自己的点击处理，
+     * 否则"自动恢复播放"和"按钮暂停"会互相抵消，按钮看起来没反应 */
+    var t = e.target;
+    if (t && t.closest && (t.closest('.mini-player') || t.closest('.mini-player-fab'))) return;
+    touchUsed = true;
+    if (blockedByPolicy && audio.src && audio.paused) play();
+  }
+  document.addEventListener('touchstart', onFirstTouch, { passive: true });
+  document.addEventListener('mousedown', onFirstTouch);
   function toggle() { if (!audio.src) return; audio.paused ? play() : pause(); }
   function seek(t) {
     if (!audio.src) return;
@@ -115,7 +132,6 @@ window.XYPlayer = (function () {
   /* ---------- 迷你播放条（music 页除外，可折叠） ---------- */
   function setFolded(v) {
     folded = v;
-    try { localStorage.setItem(FOLD_KEY, v ? '1' : '0'); } catch (e) {}
     renderMini();
   }
 
@@ -135,11 +151,11 @@ window.XYPlayer = (function () {
       '<div class="mp-prog"><i></i></div>';
     document.body.appendChild(el);
 
-    /* 折叠后的小圆点（点一下展开） */
+    /* 折叠后的小圆点（点一下展开；按住可拖到页面任意位置） */
     var fab = document.createElement('button');
     fab.type = 'button';
     fab.className = 'mini-player-fab';
-    fab.title = '展开播放条';
+    fab.title = '按住拖到喜欢的地方，点一下展开';
     fab.style.display = 'none';
     document.body.appendChild(fab);
 
@@ -154,6 +170,69 @@ window.XYPlayer = (function () {
       e.stopPropagation();
       setFolded(true);
     });
+
+    /* ---------- 小圆点拖动 ---------- */
+    var FAB_POS_KEY = 'xy_player_fab_pos';
+    function loadFabPos() {
+      try { return JSON.parse(localStorage.getItem(FAB_POS_KEY)) || null; }
+      catch (e) { return null; }
+    }
+    function saveFabPos(x, y) {
+      try { localStorage.setItem(FAB_POS_KEY, JSON.stringify({ x: x, y: y })); } catch (e) {}
+    }
+    function applyFabPos(x, y) {
+      var w = fab.offsetWidth || 46, h = fab.offsetHeight || 46;
+      var maxX = Math.max(0, window.innerWidth - w);
+      var maxY = Math.max(0, window.innerHeight - h);
+      x = Math.max(0, Math.min(x, maxX));
+      y = Math.max(0, Math.min(y, maxY));
+      fab.style.left = x + 'px';
+      fab.style.top = y + 'px';
+      fab.style.right = 'auto';
+      fab.style.bottom = 'auto';
+    }
+    /* 恢复上次放的位置 */
+    var savedPos = loadFabPos();
+    if (savedPos && typeof savedPos.x === 'number') applyFabPos(savedPos.x, savedPos.y);
+
+    var drag = null; /* { id, sx, sy, ox, oy, moved } */
+    fab.addEventListener('pointerdown', function (e) {
+      if (e.button != null && e.button !== 0) return;
+      var r = fab.getBoundingClientRect();
+      drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false };
+      try { fab.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    fab.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+      if (!drag.moved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      drag.moved = true;
+      fab.classList.add('dragging');
+      applyFabPos(drag.ox + dx, drag.oy + dy);
+    });
+    function endDrag(e) {
+      if (!drag || (e && e.pointerId !== drag.id)) return;
+      if (drag.moved) {
+        var r = fab.getBoundingClientRect();
+        saveFabPos(r.left, r.top);
+        /* 拖动结束，吞掉这次点击，避免拖完立刻展开 */
+        fab.addEventListener('click', function swallow(ev) {
+          ev.stopPropagation(); ev.preventDefault();
+          fab.removeEventListener('click', swallow);
+        }, { capture: true });
+      }
+      fab.classList.remove('dragging');
+      drag = null;
+    }
+    fab.addEventListener('pointerup', endDrag);
+    fab.addEventListener('pointercancel', endDrag);
+    /* 屏幕尺寸变了（转屏等），把小圆点拉回可视范围内 */
+    window.addEventListener('resize', function () {
+      var p = loadFabPos();
+      if (p && typeof p.x === 'number') applyFabPos(p.x, p.y);
+    });
+
     fab.addEventListener('click', function () {
       setFolded(false);
     });

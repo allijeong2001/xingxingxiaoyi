@@ -10,21 +10,17 @@
 
 <div class="chat-app" id="chatApp">
 
-  <!-- 顶部：返回 + 对方昵称 + 字卡库入口 -->
+  <!-- 顶部：返回 + 对方昵称 + 回顶/回底 + 字卡库入口 -->
   <header class="chat-header">
     <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
     <span class="chat-title" id="chatTitle"></span>
+    <button class="jump-btn" id="jumpTopBtn" type="button" aria-label="回到最顶端">↑</button>
+    <button class="jump-btn" id="jumpBottomBtn" type="button" aria-label="回到最下方">↓</button>
     <button class="cards-btn" id="cardsBtn" type="button">🍋 字卡库</button>
   </header>
 
   <!-- 聊天记录（保存在这台设备的浏览器里，退出/切屏后仍在） -->
   <main class="chat-messages" id="messages"></main>
-
-  <!-- 快速回到顶端 / 底端的浮动按钮 -->
-  <div class="chat-jump-btns">
-    <button class="jump-btn" id="jumpTopBtn" type="button" aria-label="回到最顶端">↑</button>
-    <button class="jump-btn" id="jumpBottomBtn" type="button" aria-label="回到最下方">↓</button>
-  </div>
 
   <!-- 底部输入栏 -->
   <footer class="chat-input-bar">

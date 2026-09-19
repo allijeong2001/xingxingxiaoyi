@@ -935,6 +935,39 @@ body.has-actionbar .mini-player { bottom: calc(72px + env(safe-area-inset-bottom
 }
 .mini-player .mp-prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8fb8ff, #ff9fc4); }
 
+/* 折叠按钮（收成小爱心） */
+.mini-player .mp-fold {
+  flex: none; width: 26px; height: 26px; margin-left: 6px;
+  border: none; border-radius: 50%;
+  background: rgba(255, 159, 196, .18);
+  color: #ff7fae; font-size: 13px; line-height: 1;
+  cursor: pointer;
+}
+
+/* 折叠后的小爱心（可拖动） */
+.mini-player-fab {
+  position: fixed;
+  z-index: 9999;
+  right: 16px;
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  width: 44px; height: 44px;
+  border: none; border-radius: 50%;
+  background: linear-gradient(135deg, #ff9fc4, #ff7fae);
+  box-shadow: 0 4px 14px rgba(255, 127, 174, .5);
+  color: #fff; font-size: 18px;
+  display: none; align-items: center; justify-content: center;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none; -webkit-user-select: none;
+  animation: heartBeat 1.6s ease-in-out infinite;
+}
+.mini-player-fab.dragging { animation: none; opacity: .8; }
+@keyframes heartBeat {
+  0%, 100% { transform: scale(1); }
+  12% { transform: scale(1.15); }
+  24% { transform: scale(1); }
+}
+
 /* =====================================================
  * 朋友圈
  * ===================================================== */

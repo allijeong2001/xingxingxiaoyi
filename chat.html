@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>聊天</title>
-<link rel="stylesheet" href="style.css?v=orig">
+<link rel="stylesheet" href="style.css?v=v3">
 </head>
 <body>
 
@@ -17,7 +17,7 @@
     <button class="cards-btn" id="cardsBtn" type="button">🍋 字卡库</button>
   </header>
 
-  <!-- 聊天记录（仅当前会话有效，刷新即清空） -->
+  <!-- 聊天记录（保存在这台设备的浏览器里，退出/切屏后仍在） -->
   <main class="chat-messages" id="messages"></main>
 
   <!-- 底部输入栏 -->
@@ -51,7 +51,7 @@
 </div>
 
 <script src="config.js"></script>
-<script src="player.js?v=orig"></script>
+<script src="player.js?v=v3"></script>
 <script>
 (function () {
   var g = SITE_CONFIG.global;
@@ -195,7 +195,17 @@
   });
 
   /* ---------- 消息渲染 ---------- */
-  function addMessage(who, text) {
+  /* 聊天记录持久保存：退出页面、切换网页、切屏后回来都还在 */
+  var MSG_KEY = 'xy_chat_msgs_v1';
+  var savedMsgs;
+  try { savedMsgs = JSON.parse(localStorage.getItem(MSG_KEY)) || []; }
+  catch (e) { savedMsgs = []; }
+  if (!Array.isArray(savedMsgs)) savedMsgs = [];
+  function saveMsgs() {
+    try { localStorage.setItem(MSG_KEY, JSON.stringify(savedMsgs.slice(-300))); } catch (e) {}
+  }
+
+  function addMessage(who, text, skipSave) {
     var msg = document.createElement('div');
     msg.className = 'msg ' + who;
 
@@ -217,8 +227,19 @@
     msg.appendChild(bubble);
     msgBox.appendChild(msg);
     scrollToBottom();
+    if (!skipSave) {
+      savedMsgs.push({ who: who, text: text });
+      saveMsgs();
+    }
     return msg;
   }
+
+  /* 进入页面时恢复历史记录 */
+  savedMsgs.forEach(function (m0) {
+    if (m0 && (m0.who === 'user' || m0.who === 'partner') && m0.text) {
+      addMessage(m0.who, m0.text, true);
+    }
+  });
 
   function addTyping() {
     var msg = document.createElement('div');

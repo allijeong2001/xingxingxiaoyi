@@ -107,12 +107,16 @@ window.XYPlayer = (function () {
   function getName() { return trackName; }
 
   /* ---------- 迷你播放条（music 页除外，可折叠成小爱心） ---------- */
+  /* 折叠状态全局记住：在任何页面收起后，切到其他页面也保持爱心状态 */
+  var FOLD_KEY = 'xy_player_folded';
   var folded = false;
+  try { folded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) {}
   var miniFab = null;
   var FAB_POS_KEY = 'xy_player_fab_pos';
 
   function setFolded(v) {
     folded = v;
+    try { localStorage.setItem(FOLD_KEY, v ? '1' : '0'); } catch (e) {}
     renderMini();
   }
 

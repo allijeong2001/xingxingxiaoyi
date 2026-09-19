@@ -2,7 +2,7 @@
  * 全局音频播放器（一起听）
  * - 音频文件存在 IndexedDB，播放进度/音量存在 localStorage
  * - 切换页面时自动从上次的位置继续播放
- * - music.html 以外的页面会显示迷你播放条（可折叠成小圆点）
+ * - music.html 以外的页面会显示迷你播放条（可折叠成小圆点，小圆点可拖动）
  * ===================================================== */
 window.XYPlayer = (function () {
   var LS_KEY = 'xy_player_state';
@@ -16,11 +16,7 @@ window.XYPlayer = (function () {
   var isMusicPage = /music\.html/i.test(location.href.split('/').pop() || '');
   var listeners = [];
   var miniEl = null;
-  var miniFab = null;
   var pendingSeek = typeof state.time === 'number' ? state.time : 0;
-
-  /* 折叠状态（收起后变角落小圆点，点一下展开；每次进页面默认展开，避免找不到） */
-  var folded = false;
 
   /* ---------- 状态存取 ---------- */
   function loadState() {
@@ -76,60 +72,6 @@ window.XYPlayer = (function () {
 
   function notify() {
     listeners.forEach(function (f) { try { f(); } catch (e) {} });
-    updateMediaSession();
-  }
-
-  /* ---------- Media Session（锁屏/控制中心可暂停，切后台继续播） ---------- */
-  var ART_URL = (function () {
-    try {
-      var c = document.createElement('canvas');
-      c.width = c.height = 192;
-      var x = c.getContext('2d');
-      var g = x.createLinearGradient(0, 0, 192, 192);
-      g.addColorStop(0, '#ffe9a8');
-      g.addColorStop(1, '#a8c8ff');
-      x.fillStyle = g;
-      x.fillRect(0, 0, 192, 192);
-      x.font = '110px serif';
-      x.textAlign = 'center';
-      x.textBaseline = 'middle';
-      x.fillText('🍋', 96, 104);
-      return c.toDataURL('image/png');
-    } catch (e) { return ''; }
-  })();
-
-  function updateMediaSession() {
-    if (!('mediaSession' in navigator) || !trackName) return;
-    try {
-      if (!navigator.mediaSession.metadata) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: trackName,
-          artist: '星星小艺',
-          album: '和萧逸一起听 ♪',
-          artwork: ART_URL ? [{ src: ART_URL, sizes: '192x192', type: 'image/png' }] : []
-        });
-      } else if (navigator.mediaSession.metadata.title !== trackName) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: trackName,
-          artist: '星星小艺',
-          album: '和萧逸一起听 ♪',
-          artwork: ART_URL ? [{ src: ART_URL, sizes: '192x192', type: 'image/png' }] : []
-        });
-      }
-      navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
-    } catch (e) {}
-  }
-
-  if ('mediaSession' in navigator) {
-    var bindAction = function (action, fn) {
-      try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) {}
-    };
-    bindAction('play', function () { play(); });
-    bindAction('pause', function () { pause(); });
-    bindAction('seekto', function (d) { if (d && typeof d.seekTime === 'number') seek(d.seekTime); });
-    bindAction('seekbackward', function () { seek((audio.currentTime || 0) - 10); });
-    bindAction('seekforward', function () { seek((audio.currentTime || 0) + 10); });
-    bindAction('previoustrack', function () { seek(0); });
   }
 
   /* ---------- 播放控制 ---------- */
@@ -144,30 +86,11 @@ window.XYPlayer = (function () {
     play();
     notify();
   }
-  /* iPhone 等设备：切页面后自动续播会被浏览器拦截，
-   * 记下来，等用户第一次碰屏幕（点任何地方）立即恢复播放 */
-  var blockedByPolicy = false;
-  var touchUsed = false;
   function play() {
     var p = audio.play();
-    if (p && p.catch) p.catch(function () {
-      blockedByPolicy = true;
-      saveState(); notify();
-    });
+    if (p && p.catch) p.catch(function () { saveState(); notify(); });
   }
-  function pause() { blockedByPolicy = false; audio.pause(); }
-  audio.addEventListener('play', function () { blockedByPolicy = false; });
-  function onFirstTouch(e) {
-    if (touchUsed) return;
-    /* 点的是播放条/小圆点本身：跳过自动续播，交给按钮自己的点击处理，
-     * 否则"自动恢复播放"和"按钮暂停"会互相抵消，按钮看起来没反应 */
-    var t = e.target;
-    if (t && t.closest && (t.closest('.mini-player') || t.closest('.mini-player-fab'))) return;
-    touchUsed = true;
-    if (blockedByPolicy && audio.src && audio.paused) play();
-  }
-  document.addEventListener('touchstart', onFirstTouch, { passive: true });
-  document.addEventListener('mousedown', onFirstTouch);
+  function pause() { audio.pause(); }
   function toggle() { if (!audio.src) return; audio.paused ? play() : pause(); }
   function seek(t) {
     if (!audio.src) return;
@@ -184,6 +107,10 @@ window.XYPlayer = (function () {
   function getName() { return trackName; }
 
   /* ---------- 迷你播放条（music 页除外，可折叠） ---------- */
+  var folded = false;
+  var miniFab = null;
+  var FAB_POS_KEY = 'xy_player_fab_pos';
+
   function setFolded(v) {
     folded = v;
     renderMini();
@@ -200,19 +127,10 @@ window.XYPlayer = (function () {
         '<div class="mp-name"></div>' +
         '<div class="mp-state">和萧逸一起听中 ♪</div>' +
       '</div>' +
-      '<button class="mp-btn" type="button" title="播放/暂停">▶</button>' +
+      '<button class="mp-btn" type="button">▶</button>' +
       '<button class="mp-fold" type="button" title="收起来">⌄</button>' +
       '<div class="mp-prog"><i></i></div>';
     document.body.appendChild(el);
-
-    /* 折叠后的小圆点（点一下展开；按住可拖到页面任意位置） */
-    var fab = document.createElement('button');
-    fab.type = 'button';
-    fab.className = 'mini-player-fab';
-    fab.title = '按住拖到喜欢的地方，点一下展开';
-    fab.style.display = 'none';
-    document.body.appendChild(fab);
-
     el.querySelector('.mp-btn').addEventListener('click', function (e) {
       e.stopPropagation();
       toggle();
@@ -224,9 +142,17 @@ window.XYPlayer = (function () {
       e.stopPropagation();
       setFolded(true);
     });
+    miniEl = el;
 
-    /* ---------- 小圆点拖动 ---------- */
-    var FAB_POS_KEY = 'xy_player_fab_pos';
+    /* ---------- 折叠后的小圆点：点一下展开，按住可拖到任意位置 ---------- */
+    var fab = document.createElement('button');
+    fab.type = 'button';
+    fab.className = 'mini-player-fab';
+    fab.title = '点一下展开，按住可拖动位置';
+    fab.style.display = 'none';
+    document.body.appendChild(fab);
+    miniFab = fab;
+
     function loadFabPos() {
       try { return JSON.parse(localStorage.getItem(FAB_POS_KEY)) || null; }
       catch (e) { return null; }
@@ -236,20 +162,21 @@ window.XYPlayer = (function () {
     }
     function applyFabPos(x, y) {
       var w = fab.offsetWidth || 46, h = fab.offsetHeight || 46;
-      var maxX = Math.max(0, window.innerWidth - w);
-      var maxY = Math.max(0, window.innerHeight - h);
-      x = Math.max(0, Math.min(x, maxX));
-      y = Math.max(0, Math.min(y, maxY));
+      x = Math.max(0, Math.min(x, window.innerWidth - w));
+      y = Math.max(0, Math.min(y, window.innerHeight - h));
       fab.style.left = x + 'px';
       fab.style.top = y + 'px';
-      fab.style.right = 'auto';
-      fab.style.bottom = 'auto';
     }
-    /* 恢复上次放的位置 */
     var savedPos = loadFabPos();
-    if (savedPos && typeof savedPos.x === 'number') applyFabPos(savedPos.x, savedPos.y);
+    if (savedPos && typeof savedPos.x === 'number') {
+      applyFabPos(savedPos.x, savedPos.y);
+    }
+    window.addEventListener('resize', function () {
+      var p = loadFabPos();
+      if (p && typeof p.x === 'number') applyFabPos(p.x, p.y);
+    });
 
-    var drag = null; /* { id, sx, sy, ox, oy, moved } */
+    var drag = null;
     fab.addEventListener('pointerdown', function (e) {
       if (e.button != null && e.button !== 0) return;
       var r = fab.getBoundingClientRect();
@@ -270,7 +197,7 @@ window.XYPlayer = (function () {
       if (drag.moved) {
         var r = fab.getBoundingClientRect();
         saveFabPos(r.left, r.top);
-        /* 拖动结束，吞掉这次点击，避免拖完立刻展开 */
+        /* 拖完吞掉这次点击，避免刚拖完就展开 */
         fab.addEventListener('click', function swallow(ev) {
           ev.stopPropagation(); ev.preventDefault();
           fab.removeEventListener('click', swallow);
@@ -281,18 +208,9 @@ window.XYPlayer = (function () {
     }
     fab.addEventListener('pointerup', endDrag);
     fab.addEventListener('pointercancel', endDrag);
-    /* 屏幕尺寸变了（转屏等），把小圆点拉回可视范围内 */
-    window.addEventListener('resize', function () {
-      var p = loadFabPos();
-      if (p && typeof p.x === 'number') applyFabPos(p.x, p.y);
-    });
-
     fab.addEventListener('click', function () {
       setFolded(false);
     });
-
-    miniEl = el;
-    miniFab = fab;
   }
 
   function renderMini() {

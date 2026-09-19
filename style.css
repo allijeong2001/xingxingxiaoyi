@@ -935,32 +935,31 @@ body.has-actionbar .mini-player { bottom: calc(72px + env(safe-area-inset-bottom
 }
 .mini-player .mp-prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8fb8ff, #ff9fc4); }
 .mini-player .mp-fold {
-  flex: none; width: 26px; height: 26px; border: none; border-radius: 50%;
-  background: #eef2ff; color: #7a72a8; font-size: 14px; line-height: 1;
+  flex: none; width: 26px; height: 26px; margin-left: 6px;
+  border: none; border-radius: 50%;
+  background: rgba(139, 128, 216, .12);
+  color: #8b80d8; font-size: 14px; line-height: 1;
   cursor: pointer;
 }
-.mini-player .mp-fold:active { transform: scale(.9); }
 
-/* 收起后的角落小圆按钮 */
+/* 折叠后的小圆点（可拖动） */
 .mini-player-fab {
   position: fixed;
-  right: 16px; bottom: calc(18px + env(safe-area-inset-bottom));
-  width: 46px; height: 46px; border: none; border-radius: 50%;
-  background: rgba(255, 255, 255, .95);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 6px 20px rgba(122, 122, 205, .4);
-  font-size: 20px; cursor: pointer; z-index: 80;
-  animation: miniIn .3s ease both;
+  z-index: 9999;
+  right: 16px;
+  bottom: calc(90px + env(safe-area-inset-bottom));
+  width: 46px; height: 46px;
+  border: none; border-radius: 50%;
+  background: linear-gradient(135deg, #ffe9a8, #ffd166);
+  box-shadow: 0 4px 14px rgba(139, 128, 216, .45);
+  font-size: 20px;
+  display: none; align-items: center; justify-content: center;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none; -webkit-user-select: none;
 }
-.mini-player-fab.playing { animation: fabBeat 2.4s ease-in-out infinite; }
-@keyframes fabBeat {
-  0%, 100% { transform: scale(1); }
-  12% { transform: scale(1.1); }
-  24% { transform: scale(1); }
-}
-.mini-player-fab:active { transform: scale(.9); }
-.mini-player-fab { touch-action: none; user-select: none; -webkit-user-select: none; }
-.mini-player-fab.dragging { transform: scale(1.15); opacity: .9; box-shadow: 0 10px 28px rgba(122, 122, 205, .55); }
+.mini-player-fab.playing { animation: spin 5s linear infinite; }
+.mini-player-fab.dragging { transition: none; opacity: .85; }
 
 /* =====================================================
  * 朋友圈

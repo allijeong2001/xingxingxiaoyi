@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>聊天</title>
-<link rel="stylesheet" href="style.css?v=20260919d">
+<link rel="stylesheet" href="style.css?v=f1">
 </head>
 <body>
 
@@ -14,7 +14,6 @@
   <header class="chat-header">
     <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
     <span class="chat-title" id="chatTitle"></span>
-    <button class="cards-btn" id="clearMsgsBtn" type="button" title="清空聊天记录">🧹</button>
     <button class="cards-btn" id="cardsBtn" type="button">🍋 字卡库</button>
   </header>
 
@@ -51,8 +50,8 @@
   </div>
 </div>
 
-<script src="config.js?v=20260919d"></script>
-<script src="player.js?v=20260919d"></script>
+<script src="config.js"></script>
+<script src="player.js?v=f1"></script>
 <script>
 (function () {
   var g = SITE_CONFIG.global;
@@ -80,18 +79,6 @@
   var waiting = false; // 是否正在等待对方回复
 
   document.body.classList.add('has-inputbar'); // 迷你播放器避开输入栏
-
-  /* ---------- 聊天记录 ----------
-   * 存 sessionStorage：刷新页面、跳转其他页面再回来都在，
-   * 关掉网页（标签页）才清空，无需任何后台
-   */
-  var MSG_KEY = 'xy_chat_messages_v1';
-  var historyMsgs;
-  try { historyMsgs = JSON.parse(sessionStorage.getItem(MSG_KEY)); } catch (e) { historyMsgs = null; }
-  if (!Array.isArray(historyMsgs)) historyMsgs = [];
-  function saveMsgs() {
-    try { sessionStorage.setItem(MSG_KEY, JSON.stringify(historyMsgs)); } catch (e) {}
-  }
 
   /* ---------- 字卡库 ----------
    * 数据来源：localStorage（聊天与朋友圈共用同一份），没有则用 config 里的默认字卡
@@ -208,7 +195,7 @@
   });
 
   /* ---------- 消息渲染 ---------- */
-  function addMessage(who, text, restore) {
+  function addMessage(who, text) {
     var msg = document.createElement('div');
     msg.className = 'msg ' + who;
 
@@ -229,10 +216,6 @@
     msg.appendChild(avatar);
     msg.appendChild(bubble);
     msgBox.appendChild(msg);
-    if (!restore) {
-      historyMsgs.push({ who: who, text: text });
-      saveMsgs();
-    }
     scrollToBottom();
     return msg;
   }
@@ -305,23 +288,6 @@
   sendBtn.addEventListener('click', send);
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') send();
-  });
-
-  /* ---------- 恢复本次浏览中的聊天记录 ---------- */
-  if (historyMsgs.length) {
-    historyMsgs.forEach(function (m) {
-      addMessage(m.who === 'partner' ? 'partner' : 'user', m.text, true);
-    });
-    scrollToBottom();
-  }
-
-  /* ---------- 清空记录 ---------- */
-  document.getElementById('clearMsgsBtn').addEventListener('click', function () {
-    if (!historyMsgs.length) return;
-    if (!window.confirm('清空本次浏览的聊天记录？')) return;
-    historyMsgs = [];
-    saveMsgs();
-    msgBox.innerHTML = '';
   });
 
   function escapeHtml(str) {

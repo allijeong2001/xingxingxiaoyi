@@ -2,8 +2,7 @@
  * 全局音频播放器（一起听）
  * - 音频文件存在 IndexedDB，播放进度/音量存在 localStorage
  * - 切换页面时自动从上次的位置继续播放
- * - music.html 以外的页面显示可收起的迷你播放条
- *   （收起后变成角落小圆按钮，点一下展开）
+ * - music.html 以外的页面会显示迷你播放条（可折叠成小圆点）
  * ===================================================== */
 window.XYPlayer = (function () {
   var LS_KEY = 'xy_player_state';
@@ -17,9 +16,13 @@ window.XYPlayer = (function () {
   var isMusicPage = /music\.html/i.test(location.href.split('/').pop() || '');
   var listeners = [];
   var miniEl = null;
+  var miniFab = null;
   var pendingSeek = typeof state.time === 'number' ? state.time : 0;
-  var wantPlay = !!state.wantPlay; // 用户是否希望正在播放（跨页面恢复用）
-  var gestureArmed = false; // 是否已挂上"首次交互后恢复播放"的监听
+
+  /* 折叠状态（收起后变角落小圆点，点一下展开） */
+  var FOLD_KEY = 'xy_player_folded';
+  var folded = false;
+  try { folded = localStorage.getItem(FOLD_KEY) === '1'; } catch (e) {}
 
   /* ---------- 状态存取 ---------- */
   function loadState() {
@@ -31,7 +34,6 @@ window.XYPlayer = (function () {
       localStorage.setItem(LS_KEY, JSON.stringify({
         name: trackName,
         playing: !audio.paused && !audio.ended,
-        wantPlay: wantPlay,
         time: audio.currentTime || 0,
         volume: audio.volume
       }));
@@ -91,34 +93,11 @@ window.XYPlayer = (function () {
     notify();
   }
   function play() {
-    wantPlay = true;
     var p = audio.play();
-    if (p && p.catch) p.catch(function () {
-      /* 浏览器自动播放策略拦截：等用户在本页的第一次交互（点击/触摸/按键）立即恢复 */
-      saveState();
-      armResumeOnGesture();
-      notify();
-    });
+    if (p && p.catch) p.catch(function () { saveState(); notify(); });
   }
-  function pause() { wantPlay = false; audio.pause(); }
+  function pause() { audio.pause(); }
   function toggle() { if (!audio.src) return; audio.paused ? play() : pause(); }
-
-  /* 首次交互后恢复播放（绕过自动播放限制的标准做法） */
-  function armResumeOnGesture() {
-    if (gestureArmed) return;
-    gestureArmed = true;
-    var opts = { capture: true };
-    function resume() {
-      gestureArmed = false;
-      removeEventListener('click', resume, opts);
-      removeEventListener('touchend', resume, opts);
-      removeEventListener('keydown', resume, opts);
-      if (wantPlay) play();
-    }
-    addEventListener('click', resume, opts);
-    addEventListener('touchend', resume, opts);
-    addEventListener('keydown', resume, opts);
-  }
   function seek(t) {
     if (!audio.src) return;
     audio.currentTime = Math.max(0, Math.min(t, audio.duration || 0));
@@ -133,11 +112,12 @@ window.XYPlayer = (function () {
   function hasTrack() { return !!trackName; }
   function getName() { return trackName; }
 
-  /* ---------- 迷你播放条（music 页除外，可收起） ---------- */
-  var MINI_COLLAPSED_KEY = 'xy_player_mini_collapsed';
-  var collapsed = '1' === (function () {
-    try { return localStorage.getItem(MINI_COLLAPSED_KEY) || ''; } catch (e) { return ''; }
-  })();
+  /* ---------- 迷你播放条（music 页除外，可折叠） ---------- */
+  function setFolded(v) {
+    folded = v;
+    try { localStorage.setItem(FOLD_KEY, v ? '1' : '0'); } catch (e) {}
+    renderMini();
+  }
 
   function buildMini() {
     if (isMusicPage || miniEl) return;
@@ -153,19 +133,15 @@ window.XYPlayer = (function () {
       '<button class="mp-btn" type="button" title="播放/暂停">▶</button>' +
       '<button class="mp-fold" type="button" title="收起来">⌄</button>' +
       '<div class="mp-prog"><i></i></div>';
+    document.body.appendChild(el);
 
-    /* 收起后的小圆按钮 */
+    /* 折叠后的小圆点（点一下展开） */
     var fab = document.createElement('button');
     fab.type = 'button';
-    fab.className = 'mini-player-fab' + (audio.paused ? '' : ' playing');
+    fab.className = 'mini-player-fab';
     fab.title = '展开播放条';
     fab.style.display = 'none';
-    fab.innerHTML = '🎵';
-
-    document.body.appendChild(el);
     document.body.appendChild(fab);
-    miniEl = el;
-    miniFab = fab;
 
     el.querySelector('.mp-btn').addEventListener('click', function (e) {
       e.stopPropagation();
@@ -176,30 +152,32 @@ window.XYPlayer = (function () {
     });
     el.querySelector('.mp-fold').addEventListener('click', function (e) {
       e.stopPropagation();
-      collapsed = true;
-      try { localStorage.setItem(MINI_COLLAPSED_KEY, '1'); } catch (err) {}
-      renderMini();
+      setFolded(true);
     });
     fab.addEventListener('click', function () {
-      collapsed = false;
-      try { localStorage.setItem(MINI_COLLAPSED_KEY, '0'); } catch (err) {}
-      renderMini();
+      setFolded(false);
     });
+
+    miniEl = el;
+    miniFab = fab;
   }
 
-  var miniFab = null;
-
   function renderMini() {
-    if (!miniEl || !miniFab) return;
-    var has = !!trackName;
-    miniEl.style.display = (has && !collapsed) ? 'flex' : 'none';
-    miniFab.style.display = (has && collapsed) ? 'block' : 'none';
-    if (!has) return;
+    if (!miniEl) return;
+    if (!trackName) {
+      miniEl.style.display = 'none';
+      if (miniFab) miniFab.style.display = 'none';
+      return;
+    }
+    miniEl.style.display = folded ? 'none' : 'flex';
+    if (miniFab) {
+      miniFab.style.display = folded ? 'flex' : 'none';
+      miniFab.textContent = audio.paused ? '🎵' : '🎶';
+      miniFab.classList.toggle('playing', !audio.paused);
+    }
     miniEl.querySelector('.mp-name').textContent = trackName;
     miniEl.querySelector('.mp-btn').textContent = audio.paused ? '▶' : '⏸';
     miniEl.classList.toggle('playing', !audio.paused);
-    miniFab.classList.toggle('playing', !audio.paused);
-    miniFab.textContent = audio.paused ? '🎵' : '🎶';
     var dur = audio.duration || 0;
     var pct = dur ? (audio.currentTime / dur) * 100 : 0;
     miniEl.querySelector('.mp-prog i').style.width = pct + '%';
@@ -219,13 +197,13 @@ window.XYPlayer = (function () {
   /* ---------- 初始化：恢复上次的曲目 ---------- */
   if (trackName) {
     idbGet('current_audio').then(function (blob) {
-      if (!blob) { trackName = ''; wantPlay = false; saveState(); renderMini(); return; }
+      if (!blob) { trackName = ''; saveState(); renderMini(); return; }
       objUrl = URL.createObjectURL(blob);
       audio.src = objUrl;
       if (pendingSeek > 0) {
         try { audio.currentTime = pendingSeek; } catch (e) {}
       }
-      if (state.wantPlay || state.playing) play();
+      if (state.playing) play();
       notify();
     }).catch(function () {});
   }

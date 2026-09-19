@@ -1,8 +1,8 @@
 /* =====================================================
  * 全局音频播放器（一起听）
  * - 音频文件存在 IndexedDB，播放进度/音量存在 localStorage
- * - 切换页面时自动从上次的位置继续播放
- * - music.html 以外的页面会显示迷你播放条
+ * - 切换页面时自动从上次的位置继续播放（纯后台，无浮窗）
+ * - 播放界面只在 music.html 里
  * ===================================================== */
 window.XYPlayer = (function () {
   var LS_KEY = 'xy_player_state';
@@ -106,48 +106,14 @@ window.XYPlayer = (function () {
   function hasTrack() { return !!trackName; }
   function getName() { return trackName; }
 
-  /* ---------- 迷你播放条（music 页除外） ---------- */
-  function buildMini() {
-    if (isMusicPage || miniEl) return;
-    var el = document.createElement('div');
-    el.className = 'mini-player';
-    el.style.display = 'none';
-    el.innerHTML =
-      '<span class="mp-cover">🍋</span>' +
-      '<div class="mp-info">' +
-        '<div class="mp-name"></div>' +
-        '<div class="mp-state">和萧逸一起听中 ♪</div>' +
-      '</div>' +
-      '<button class="mp-btn" type="button">▶</button>' +
-      '<div class="mp-prog"><i></i></div>';
-    document.body.appendChild(el);
-    el.querySelector('.mp-btn').addEventListener('click', function (e) {
-      e.stopPropagation();
-      toggle();
-    });
-    el.querySelector('.mp-info').addEventListener('click', function () {
-      location.href = 'music.html';
-    });
-    miniEl = el;
-  }
+  /* ---------- 播放条只在 music.html 内展示 ----------
+   * 其他页面不显示任何浮窗，仅在后台静默续播
+   * （每次切页会从 IndexedDB 恢复音频并接着上次进度播放）
+   */
+  function buildMini() { /* 不再在其他页面创建迷你播放条 */ }
+  function renderMini() { /* 无浮窗可渲染 */ }
 
-  function renderMini() {
-    if (!miniEl) return;
-    if (!trackName) { miniEl.style.display = 'none'; return; }
-    miniEl.style.display = 'flex';
-    miniEl.querySelector('.mp-name').textContent = trackName;
-    miniEl.querySelector('.mp-btn').textContent = audio.paused ? '▶' : '⏸';
-    miniEl.classList.toggle('playing', !audio.paused);
-    var dur = audio.duration || 0;
-    var pct = dur ? (audio.currentTime / dur) * 100 : 0;
-    miniEl.querySelector('.mp-prog i').style.width = pct + '%';
-  }
-  listeners.push(renderMini);
-
-  function init() {
-    buildMini();
-    renderMini();
-  }
+  function init() {}
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

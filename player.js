@@ -1,22 +1,27 @@
 /* =====================================================
  * 全局音频播放器（一起听）
  * - 音频文件存在 IndexedDB，播放进度/音量存在 localStorage
- * - 切换页面时自动从上次的位置继续播放
+ * - 音乐记忆只限本次访问：同一标签页里切页面会继续播放；
+ *   关掉网页再打开不会自动恢复，需重新进「一起听」选歌
  * - music.html 以外的页面会显示迷你播放条
  * ===================================================== */
 window.XYPlayer = (function () {
   var LS_KEY = 'xy_player_state';
-  var state = loadState();
+  var SS_KEY = 'xy_player_session';
+  /* 只有本次访问（同一标签页）里导入过歌，才恢复上次的曲目 */
+  var inSession = false;
+  try { inSession = sessionStorage.getItem(SS_KEY) === '1'; } catch (e) {}
+  var state = inSession ? loadState() : {};
   var audio = new Audio();
   audio.preload = 'auto';
   audio.volume = typeof state.volume === 'number' ? state.volume : 0.9;
 
   var objUrl = null;
-  var trackName = state.name || '';
+  var trackName = inSession ? (state.name || '') : '';
   var isMusicPage = /music\.html/i.test(location.href.split('/').pop() || '');
   var listeners = [];
   var miniEl = null;
-  var pendingSeek = typeof state.time === 'number' ? state.time : 0;
+  var pendingSeek = inSession && typeof state.time === 'number' ? state.time : 0;
 
   /* ---------- 状态存取 ---------- */
   function loadState() {
@@ -77,6 +82,7 @@ window.XYPlayer = (function () {
   /* ---------- 播放控制 ---------- */
   function setTrack(name, blob) {
     trackName = name;
+    try { sessionStorage.setItem(SS_KEY, '1'); } catch (e) {}
     if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
     objUrl = URL.createObjectURL(blob);
     audio.src = objUrl;

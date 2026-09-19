@@ -76,6 +76,60 @@ window.XYPlayer = (function () {
 
   function notify() {
     listeners.forEach(function (f) { try { f(); } catch (e) {} });
+    updateMediaSession();
+  }
+
+  /* ---------- Media Session（锁屏/控制中心可暂停，切后台继续播） ---------- */
+  var ART_URL = (function () {
+    try {
+      var c = document.createElement('canvas');
+      c.width = c.height = 192;
+      var x = c.getContext('2d');
+      var g = x.createLinearGradient(0, 0, 192, 192);
+      g.addColorStop(0, '#ffe9a8');
+      g.addColorStop(1, '#a8c8ff');
+      x.fillStyle = g;
+      x.fillRect(0, 0, 192, 192);
+      x.font = '110px serif';
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      x.fillText('🍋', 96, 104);
+      return c.toDataURL('image/png');
+    } catch (e) { return ''; }
+  })();
+
+  function updateMediaSession() {
+    if (!('mediaSession' in navigator) || !trackName) return;
+    try {
+      if (!navigator.mediaSession.metadata) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: trackName,
+          artist: '星星小艺',
+          album: '和萧逸一起听 ♪',
+          artwork: ART_URL ? [{ src: ART_URL, sizes: '192x192', type: 'image/png' }] : []
+        });
+      } else if (navigator.mediaSession.metadata.title !== trackName) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: trackName,
+          artist: '星星小艺',
+          album: '和萧逸一起听 ♪',
+          artwork: ART_URL ? [{ src: ART_URL, sizes: '192x192', type: 'image/png' }] : []
+        });
+      }
+      navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
+    } catch (e) {}
+  }
+
+  if ('mediaSession' in navigator) {
+    var bindAction = function (action, fn) {
+      try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) {}
+    };
+    bindAction('play', function () { play(); });
+    bindAction('pause', function () { pause(); });
+    bindAction('seekto', function (d) { if (d && typeof d.seekTime === 'number') seek(d.seekTime); });
+    bindAction('seekbackward', function () { seek((audio.currentTime || 0) - 10); });
+    bindAction('seekforward', function () { seek((audio.currentTime || 0) + 10); });
+    bindAction('previoustrack', function () { seek(0); });
   }
 
   /* ---------- 播放控制 ---------- */

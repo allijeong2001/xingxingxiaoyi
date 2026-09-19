@@ -269,6 +269,31 @@ input, textarea { font-family: inherit; }
 }
 .chat-header .jump-btn:active { transform: scale(.92); }
 
+/* 聊天区左下角的小回到顶部按钮（兜底） */
+.chat-top-fab {
+  position: absolute;
+  left: 8px;
+  /* chat-input-bar 高度 62px + 安全区 + 14px 间距，把按钮抬到输入栏上方 */
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .82);
+  color: var(--text-color, #5a5f8f);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(139, 128, 216, .18);
+  cursor: pointer;
+  z-index: 3;
+  transition: transform .15s ease;
+}
+.chat-top-fab:active { transform: scale(.9); }
+
 .msg { display: flex; gap: 8px; max-width: 86%; animation: msgIn .3s ease both; }
 @keyframes msgIn {
   from { opacity: 0; transform: translateY(8px); }

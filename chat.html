@@ -22,6 +22,9 @@
   <!-- 聊天记录（保存在这台设备的浏览器里，退出/切屏后仍在） -->
   <main class="chat-messages" id="messages"></main>
 
+  <!-- 左下角小回到顶部按钮（兜底，不占聊天框位置） -->
+  <button class="chat-top-fab" id="chatTopFab" type="button" aria-label="一键回到最顶端">↑</button>
+
   <!-- 底部输入栏 -->
   <footer class="chat-input-bar">
     <input type="text" id="chatInput" autocomplete="off" maxlength="500">
@@ -321,6 +324,10 @@
     scrollToBottom();
     // 兜底：旧内核或快速连点时，scrollTo 可能不立即生效
     msgBox.scrollTop = msgBox.scrollHeight;
+  });
+  /* 左下角小按钮（兜底）：一键回到顶端 */
+  document.getElementById('chatTopFab').addEventListener('click', function () {
+    msgBox.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
   function escapeHtml(str) {

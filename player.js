@@ -2,7 +2,7 @@
  * 全局音频播放器（一起听）
  * - 音频文件存在 IndexedDB，播放进度/音量存在 localStorage
  * - 切换页面时自动从上次的位置继续播放
- * - music.html 以外的页面会显示迷你播放条（可折叠成小圆点，小圆点可拖动）
+ * - music.html 以外的页面会显示迷你播放条
  * ===================================================== */
 window.XYPlayer = (function () {
   var LS_KEY = 'xy_player_state';
@@ -106,16 +106,7 @@ window.XYPlayer = (function () {
   function hasTrack() { return !!trackName; }
   function getName() { return trackName; }
 
-  /* ---------- 迷你播放条（music 页除外，可折叠） ---------- */
-  var folded = false;
-  var miniFab = null;
-  var FAB_POS_KEY = 'xy_player_fab_pos';
-
-  function setFolded(v) {
-    folded = v;
-    renderMini();
-  }
-
+  /* ---------- 迷你播放条（music 页除外） ---------- */
   function buildMini() {
     if (isMusicPage || miniEl) return;
     var el = document.createElement('div');
@@ -128,7 +119,6 @@ window.XYPlayer = (function () {
         '<div class="mp-state">和萧逸一起听中 ♪</div>' +
       '</div>' +
       '<button class="mp-btn" type="button">▶</button>' +
-      '<button class="mp-fold" type="button" title="收起来">⌄</button>' +
       '<div class="mp-prog"><i></i></div>';
     document.body.appendChild(el);
     el.querySelector('.mp-btn').addEventListener('click', function (e) {
@@ -138,94 +128,13 @@ window.XYPlayer = (function () {
     el.querySelector('.mp-info').addEventListener('click', function () {
       location.href = 'music.html';
     });
-    el.querySelector('.mp-fold').addEventListener('click', function (e) {
-      e.stopPropagation();
-      setFolded(true);
-    });
     miniEl = el;
-
-    /* ---------- 折叠后的小圆点：点一下展开，按住可拖到任意位置 ---------- */
-    var fab = document.createElement('button');
-    fab.type = 'button';
-    fab.className = 'mini-player-fab';
-    fab.title = '点一下展开，按住可拖动位置';
-    fab.style.display = 'none';
-    document.body.appendChild(fab);
-    miniFab = fab;
-
-    function loadFabPos() {
-      try { return JSON.parse(localStorage.getItem(FAB_POS_KEY)) || null; }
-      catch (e) { return null; }
-    }
-    function saveFabPos(x, y) {
-      try { localStorage.setItem(FAB_POS_KEY, JSON.stringify({ x: x, y: y })); } catch (e) {}
-    }
-    function applyFabPos(x, y) {
-      var w = fab.offsetWidth || 46, h = fab.offsetHeight || 46;
-      x = Math.max(0, Math.min(x, window.innerWidth - w));
-      y = Math.max(0, Math.min(y, window.innerHeight - h));
-      fab.style.left = x + 'px';
-      fab.style.top = y + 'px';
-    }
-    var savedPos = loadFabPos();
-    if (savedPos && typeof savedPos.x === 'number') {
-      applyFabPos(savedPos.x, savedPos.y);
-    }
-    window.addEventListener('resize', function () {
-      var p = loadFabPos();
-      if (p && typeof p.x === 'number') applyFabPos(p.x, p.y);
-    });
-
-    var drag = null;
-    fab.addEventListener('pointerdown', function (e) {
-      if (e.button != null && e.button !== 0) return;
-      var r = fab.getBoundingClientRect();
-      drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false };
-      try { fab.setPointerCapture(e.pointerId); } catch (err) {}
-      e.preventDefault();
-    });
-    fab.addEventListener('pointermove', function (e) {
-      if (!drag || e.pointerId !== drag.id) return;
-      var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
-      if (!drag.moved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-      drag.moved = true;
-      fab.classList.add('dragging');
-      applyFabPos(drag.ox + dx, drag.oy + dy);
-    });
-    function endDrag(e) {
-      if (!drag || (e && e.pointerId !== drag.id)) return;
-      if (drag.moved) {
-        var r = fab.getBoundingClientRect();
-        saveFabPos(r.left, r.top);
-        /* 拖完吞掉这次点击，避免刚拖完就展开 */
-        fab.addEventListener('click', function swallow(ev) {
-          ev.stopPropagation(); ev.preventDefault();
-          fab.removeEventListener('click', swallow);
-        }, { capture: true });
-      }
-      fab.classList.remove('dragging');
-      drag = null;
-    }
-    fab.addEventListener('pointerup', endDrag);
-    fab.addEventListener('pointercancel', endDrag);
-    fab.addEventListener('click', function () {
-      setFolded(false);
-    });
   }
 
   function renderMini() {
     if (!miniEl) return;
-    if (!trackName) {
-      miniEl.style.display = 'none';
-      if (miniFab) miniFab.style.display = 'none';
-      return;
-    }
-    miniEl.style.display = folded ? 'none' : 'flex';
-    if (miniFab) {
-      miniFab.style.display = folded ? 'flex' : 'none';
-      miniFab.textContent = audio.paused ? '🎵' : '🎶';
-      miniFab.classList.toggle('playing', !audio.paused);
-    }
+    if (!trackName) { miniEl.style.display = 'none'; return; }
+    miniEl.style.display = 'flex';
     miniEl.querySelector('.mp-name').textContent = trackName;
     miniEl.querySelector('.mp-btn').textContent = audio.paused ? '▶' : '⏸';
     miniEl.classList.toggle('playing', !audio.paused);
@@ -246,36 +155,18 @@ window.XYPlayer = (function () {
   }
 
   /* ---------- 初始化：恢复上次的曲目 ---------- */
-  function restoreFromStorage() {
-    var s = loadState();
-    if (!s.name) { trackName = ''; renderMini(); return; }
-    trackName = s.name;
-    pendingSeek = typeof s.time === 'number' ? s.time : 0;
-    if (audio.src) {
-      try { audio.currentTime = pendingSeek; } catch (e) {}
-      if (s.playing && audio.paused) play();
-      notify();
-      return;
-    }
+  if (trackName) {
     idbGet('current_audio').then(function (blob) {
       if (!blob) { trackName = ''; saveState(); renderMini(); return; }
-      if (objUrl) { URL.revokeObjectURL(objUrl); }
       objUrl = URL.createObjectURL(blob);
       audio.src = objUrl;
       if (pendingSeek > 0) {
         try { audio.currentTime = pendingSeek; } catch (e) {}
       }
-      if (s.playing) play();
+      if (state.playing) play();
       notify();
     }).catch(function () {});
   }
-  if (trackName) restoreFromStorage();
-
-  /* iOS Safari 用返回手势切页时，页面从缓存(bfcache)恢复，脚本不会重新执行，
-   * 播放条停留在离开前的旧状态——这里重新读取并渲染 */
-  window.addEventListener('pageshow', function (e) {
-    if (e.persisted) restoreFromStorage();
-  });
 
   return {
     audio: audio,

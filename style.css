@@ -237,6 +237,40 @@ input, textarea { font-family: inherit; }
   background: linear-gradient(180deg, rgba(255, 255, 255, .35), rgba(255, 255, 255, .5));
 }
 
+/* 聊天记录区域的 顶部/底部 快速跳转按钮 */
+.chat-jump-btns {
+  position: absolute;
+  right: 10px;
+  top: calc(52px + 50%);   /* 52px = header 高度，居中于消息区 */
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 4;
+  pointer-events: none;    /* 容器不接收事件，让下面的按钮单独可点 */
+}
+.jump-btn {
+  pointer-events: auto;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .85);
+  color: var(--text-color, #5a5f8f);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(139, 128, 216, .22);
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  transition: transform .15s ease, opacity .15s ease;
+}
+.jump-btn:active { transform: scale(.9); }
+
 .msg { display: flex; gap: 8px; max-width: 86%; animation: msgIn .3s ease both; }
 @keyframes msgIn {
   from { opacity: 0; transform: translateY(8px); }

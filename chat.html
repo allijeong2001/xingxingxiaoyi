@@ -20,6 +20,12 @@
   <!-- 聊天记录（保存在这台设备的浏览器里，退出/切屏后仍在） -->
   <main class="chat-messages" id="messages"></main>
 
+  <!-- 快速回到顶端 / 底端的浮动按钮 -->
+  <div class="chat-jump-btns">
+    <button class="jump-btn" id="jumpTopBtn" type="button" aria-label="回到最顶端">↑</button>
+    <button class="jump-btn" id="jumpBottomBtn" type="button" aria-label="回到最下方">↓</button>
+  </div>
+
   <!-- 底部输入栏 -->
   <footer class="chat-input-bar">
     <input type="text" id="chatInput" autocomplete="off" maxlength="500">
@@ -309,6 +315,16 @@
   sendBtn.addEventListener('click', send);
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') send();
+  });
+
+  /* ---------- 快速跳到顶/底 ---------- */
+  document.getElementById('jumpTopBtn').addEventListener('click', function () {
+    msgBox.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  document.getElementById('jumpBottomBtn').addEventListener('click', function () {
+    scrollToBottom();
+    // 兜底：旧内核或快速连点时，scrollTo 可能不立即生效
+    msgBox.scrollTop = msgBox.scrollHeight;
   });
 
   function escapeHtml(str) {

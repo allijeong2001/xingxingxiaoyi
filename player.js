@@ -246,18 +246,36 @@ window.XYPlayer = (function () {
   }
 
   /* ---------- 初始化：恢复上次的曲目 ---------- */
-  if (trackName) {
+  function restoreFromStorage() {
+    var s = loadState();
+    if (!s.name) { trackName = ''; renderMini(); return; }
+    trackName = s.name;
+    pendingSeek = typeof s.time === 'number' ? s.time : 0;
+    if (audio.src) {
+      try { audio.currentTime = pendingSeek; } catch (e) {}
+      if (s.playing && audio.paused) play();
+      notify();
+      return;
+    }
     idbGet('current_audio').then(function (blob) {
       if (!blob) { trackName = ''; saveState(); renderMini(); return; }
+      if (objUrl) { URL.revokeObjectURL(objUrl); }
       objUrl = URL.createObjectURL(blob);
       audio.src = objUrl;
       if (pendingSeek > 0) {
         try { audio.currentTime = pendingSeek; } catch (e) {}
       }
-      if (state.playing) play();
+      if (s.playing) play();
       notify();
     }).catch(function () {});
   }
+  if (trackName) restoreFromStorage();
+
+  /* iOS Safari 用返回手势切页时，页面从缓存(bfcache)恢复，脚本不会重新执行，
+   * 播放条停留在离开前的旧状态——这里重新读取并渲染 */
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) restoreFromStorage();
+  });
 
   return {
     audio: audio,
